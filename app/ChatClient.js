@@ -716,17 +716,15 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         />
       )}
 
-      <main
-        className="flex-1 flex flex-col min-w-0 pt-14 md:pt-0 bg-no-repeat"
-        style={{
-          backgroundImage: "url(/lain-bg.jpeg)",
-          backgroundSize: "260px auto",
-          backgroundPosition: "bottom right",
-        }}
-      >
+      <main className="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
         <div
           ref={scrollRef}
-          className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3"
+          className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3 bg-no-repeat"
+          style={{
+            backgroundImage: "url(/lain-bg.jpeg)",
+            backgroundSize: "260px auto",
+            backgroundPosition: "bottom right",
+          }}
         >
           {messages.map((m, i) =>
             m.role === "confirm" ? (
