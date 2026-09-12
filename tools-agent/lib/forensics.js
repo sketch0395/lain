@@ -4,10 +4,11 @@ const fs = require("node:fs");
 const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 const { ALLOWED_ROOTS } = require("./config");
 const { resolveInputPath, isAllowed, walk } = require("./paths");
 const { send, readJsonBody } = require("./http");
+const { notify } = require("./notify");
 
 // ---------------------------------------------------------------------------
 // Digital-forensics-style tools. File-based ones (hash/metadata/strings/
@@ -284,9 +285,94 @@ function analyzePcap(targetPath, limit) {
 }
 
 const CAPTURE_DEFAULT_DURATION_SECONDS = 10;
-const CAPTURE_MAX_DURATION_SECONDS = 60;
+const CAPTURE_MAX_DURATION_SECONDS = 1800; // 30 minutes
+// Captures at or under this run synchronously (the HTTP request waits for
+// the result, like before). Longer ones run in the background and fire a
+// desktop notification when done instead of holding the chat request open
+// for minutes (which would also blow past Ollama's response timeout).
+const CAPTURE_SYNC_MAX_SECONDS = 25;
 const CAPTURE_DEFAULT_PACKET_LIMIT = 100;
-const CAPTURE_MAX_PACKET_LIMIT = 2000;
+const CAPTURE_MAX_PACKET_LIMIT = 1_000_000;
+// Default packet cap for background captures when the caller didn't ask
+// for a specific limit — high enough that `duration`, not packet count, is
+// what actually bounds a multi-minute capture.
+const CAPTURE_BACKGROUND_DEFAULT_PACKET_LIMIT = 500_000;
+
+// Resolves (and, unless opting out, creates) the .pcap destination for a
+// capture. Returns null if the caller passed `savePath: false` to skip
+// saving entirely. Shared by both the synchronous and background capture
+// paths, and by the route handler (which needs to know the path up front
+// so it can tell the user where a background capture will land).
+function resolveCaptureSavePath(savePath) {
+  if (savePath === false) return null;
+  const requestedPath =
+    typeof savePath === "string" && savePath.trim()
+      ? savePath
+      : path.join(DEFAULT_CAPTURE_DIR, `capture-${timestampForFilename()}.pcap`);
+  let resolved = resolveInputPath(requestedPath);
+  if (!isAllowed(resolved)) throw new Error("save path not allowed");
+  if (!PCAP_EXTENSIONS.has(path.extname(resolved).toLowerCase())) {
+    resolved += ".pcap";
+  }
+  // Create any missing parent folders (e.g. "~/Documents/pcaps/") so the
+  // user/model can name a brand-new location without a separate mkdir step
+  // first. Still bounded by isAllowed() above — every ancestor of an
+  // allowed path is itself inside the same allowed root.
+  const destDir = path.dirname(resolved);
+  if (!isAllowed(destDir)) throw new Error("save path not allowed");
+  fs.mkdirSync(destDir, { recursive: true });
+  return resolved;
+}
+
+function clampCaptureDuration(durationSeconds) {
+  return Math.min(
+    Math.max(Number(durationSeconds) || CAPTURE_DEFAULT_DURATION_SECONDS, 1),
+    CAPTURE_MAX_DURATION_SECONDS
+  );
+}
+
+function clampCapturePacketLimit(packetLimit, duration) {
+  if (packetLimit) {
+    return Math.min(Math.max(Number(packetLimit), 1), CAPTURE_MAX_PACKET_LIMIT);
+  }
+  return duration > CAPTURE_SYNC_MAX_SECONDS
+    ? CAPTURE_BACKGROUND_DEFAULT_PACKET_LIMIT
+    : CAPTURE_DEFAULT_PACKET_LIMIT;
+}
+
+// Runs `timeout <duration>s tcpdump <args>` without blocking Node's event
+// loop (unlike execFileSync, which would freeze the whole agent — including
+// /health — for the entire capture, a real problem once captures can run
+// for up to 30 minutes). Resolves with the same {stdout, stderr} shape
+// execFileSync's catch block used to give us, plus `timedOut` so callers
+// can tell a hard-kill apart from a real spawn failure.
+function runTcpdumpAsync(duration, args) {
+  return new Promise((resolve) => {
+    const child = spawn("timeout", [`${duration}s`, "tcpdump", ...args]);
+    let stdout = "";
+    let stderr = "";
+    const MAX_BUFFERED = 20 * 1024 * 1024;
+    child.stdout.on("data", (chunk) => {
+      if (stdout.length < MAX_BUFFERED) stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk) => {
+      if (stderr.length < MAX_BUFFERED) stderr += chunk.toString();
+    });
+    // Safety net in case `timeout` itself doesn't stop tcpdump for some
+    // reason — kill the whole process group a bit after it was supposed to.
+    const killTimer = setTimeout(() => {
+      child.kill("SIGKILL");
+    }, (duration + 15) * 1000);
+    child.on("close", () => {
+      clearTimeout(killTimer);
+      resolve({ stdout, stderr });
+    });
+    child.on("error", (err) => {
+      clearTimeout(killTimer);
+      resolve({ stdout, stderr: stderr + err.message });
+    });
+  });
+}
 
 // Live packet capture, bounded on both ends: `timeout` kills tcpdump after
 // `durationSeconds` no matter what, and `-c` stops it early once
@@ -299,7 +385,16 @@ const CAPTURE_MAX_PACKET_LIMIT = 2000;
 // never passed through a shell — so there's no injection risk regardless
 // of its contents, though it does mean quoted/escaped BPF tokens aren't
 // supported (not needed for the simple filters this is meant for).
-function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimit, savePath }) {
+//
+// `resolvedSavePath` must already be resolved/created (see
+// resolveCaptureSavePath) — null means "don't save, just summarize".
+async function capturePackets({
+  interfaceName,
+  filterExpr,
+  durationSeconds,
+  packetLimit,
+  resolvedSavePath,
+}) {
   if (!commandAvailable("tcpdump")) {
     throw new Error(
       "tcpdump is not installed — install it (e.g. `sudo pacman -S tcpdump`) to capture packets."
@@ -307,80 +402,35 @@ function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimi
   }
 
   const iface = interfaceName || "any";
-  const duration = Math.min(
-    Math.max(Number(durationSeconds) || CAPTURE_DEFAULT_DURATION_SECONDS, 1),
-    CAPTURE_MAX_DURATION_SECONDS
-  );
-  const limit = Math.min(
-    Math.max(Number(packetLimit) || CAPTURE_DEFAULT_PACKET_LIMIT, 1),
-    CAPTURE_MAX_PACKET_LIMIT
-  );
+  const duration = clampCaptureDuration(durationSeconds);
+  const limit = clampCapturePacketLimit(packetLimit, duration);
   const filterArgs = filterExpr ? String(filterExpr).trim().split(/\s+/).filter(Boolean) : [];
-
-  // Captures are saved by default so nothing is lost just because the user
-  // (or the model) forgot to ask for a save_path — pass save: false to opt
-  // out and only get the in-memory summary.
-  let resolvedSavePath = null;
-  if (savePath !== false) {
-    const requestedPath =
-      typeof savePath === "string" && savePath.trim()
-        ? savePath
-        : path.join(DEFAULT_CAPTURE_DIR, `capture-${timestampForFilename()}.pcap`);
-    resolvedSavePath = resolveInputPath(requestedPath);
-    if (!isAllowed(resolvedSavePath)) throw new Error("save path not allowed");
-    if (!PCAP_EXTENSIONS.has(path.extname(resolvedSavePath).toLowerCase())) {
-      resolvedSavePath += ".pcap";
-    }
-    // Create any missing parent folders (e.g. "~/Documents/pcaps/") so the
-    // user/model can name a brand-new location without a separate mkdir
-    // step first. Still bounded by isAllowed() above — every ancestor of an
-    // allowed path is itself inside the same allowed root.
-    const destDir = path.dirname(resolvedSavePath);
-    if (!isAllowed(destDir)) throw new Error("save path not allowed");
-    fs.mkdirSync(destDir, { recursive: true });
-  }
 
   const baseArgs = ["-nn", "-i", iface, "-c", String(limit)];
   const args = resolvedSavePath
     ? [...baseArgs, "-w", resolvedSavePath, ...filterArgs]
     : [...baseArgs, ...filterArgs];
 
-  let out = "";
-  try {
-    out = execFileSync("timeout", [`${duration}s`, "tcpdump", ...args], {
-      encoding: "utf8",
-      // A little longer than `duration` so `timeout` itself is what stops
-      // tcpdump, not Node's own timeout mid-write.
-      timeout: (duration + 10) * 1000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (err) {
-    // `timeout` exits 124 when it has to kill tcpdump — expected, not an
-    // error, as long as we got output. Permission errors (no root/no
-    // capabilities) come through stderr instead.
-    if (err.stdout !== undefined) out = err.stdout.toString();
-    const stderr = (err.stderr || "").toString();
-    if (/permission|not permitted|cap_net_raw/i.test(stderr)) {
-      throw new Error(
-        "tcpdump couldn't open the interface (permission denied). Grant it packet-capture " +
-          "rights, e.g. `sudo setcap cap_net_raw,cap_net_admin+eip $(command -v tcpdump)`, " +
-          "then try again."
-      );
+  const { stdout: out, stderr } = await runTcpdumpAsync(duration, args);
+
+  if (/permission|not permitted|cap_net_raw/i.test(stderr)) {
+    throw new Error(
+      "tcpdump couldn't open the interface (permission denied). Grant it packet-capture " +
+        "rights, e.g. `sudo setcap cap_net_raw,cap_net_admin+eip $(command -v tcpdump)`, " +
+        "then try again."
+    );
+  }
+  // With -w, tcpdump never prints decoded packets to stdout — its normal
+  // "N packets captured" summary always goes to stderr, even on a
+  // perfectly successful, `timeout`-terminated capture. So stderr text
+  // alone isn't a failure signal when we're saving to a file; only treat
+  // it as fatal if the file wasn't actually written.
+  if (resolvedSavePath) {
+    if (!fs.existsSync(resolvedSavePath)) {
+      throw new Error(`tcpdump failed: ${stderr.trim() || "unknown error"}`);
     }
-    // With -w, tcpdump never prints decoded packets to stdout — its normal
-    // "N packets captured" summary always goes to stderr, even on a
-    // perfectly successful, `timeout`-terminated capture. So stderr text
-    // alone isn't a failure signal when we're saving to a file; only treat
-    // it as fatal if the file wasn't actually written.
-    if (resolvedSavePath) {
-      if (!fs.existsSync(resolvedSavePath)) {
-        throw new Error(`tcpdump failed: ${stderr.trim() || err.message}`);
-      }
-    } else if (!out && stderr) {
-      throw new Error(`tcpdump failed: ${stderr.trim()}`);
-    } else if (!out) {
-      throw new Error(`tcpdump failed: ${err.message}`);
-    }
+  } else if (!out && stderr) {
+    throw new Error(`tcpdump failed: ${stderr.trim()}`);
   }
 
   if (resolvedSavePath) {
@@ -391,6 +441,28 @@ function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimi
   }
 
   return summarizeTcpdumpOutput(out);
+}
+
+// Fire-and-forget wrapper for long captures: runs capturePackets() without
+// making the caller wait for it, then sends a desktop notification (via the
+// same notify-send path reminders use) summarizing the result — success or
+// failure — so the user finds out without having to keep the chat open.
+function capturePacketsInBackground(opts) {
+  capturePackets(opts)
+    .then((result) => {
+      const topTalker = result.topTalkers?.[0];
+      const body = [
+        `${result.packetsSampled ?? 0} packets sampled.`,
+        topTalker ? `Top talker: ${topTalker.host} (${topTalker.count}).` : null,
+        result.savedTo ? `Saved to ${result.savedTo}.` : null,
+      ]
+        .filter(Boolean)
+        .join(" ");
+      notify("📡 Packet capture complete", body);
+    })
+    .catch((err) => {
+      notify("📡 Packet capture failed", err.message);
+    });
 }
 
 function registerRoutes(router) {
@@ -474,17 +546,36 @@ function registerRoutes(router) {
   router.post("/capture", async (req, res) => {
     const body = await readJsonBody(req);
     try {
-      send(
-        res,
-        200,
-        capturePackets({
-          interfaceName: body.interface,
-          filterExpr: body.filter,
-          durationSeconds: body.duration,
-          packetLimit: body.limit,
-          savePath: body.savePath,
-        })
-      );
+      const duration = clampCaptureDuration(body.duration);
+      const resolvedSavePath = resolveCaptureSavePath(body.savePath);
+      const opts = {
+        interfaceName: body.interface,
+        filterExpr: body.filter,
+        durationSeconds: duration,
+        packetLimit: body.limit,
+        resolvedSavePath,
+      };
+
+      if (duration > CAPTURE_SYNC_MAX_SECONDS) {
+        // Long capture: don't hold the HTTP request (and the chat turn
+        // behind it) open for minutes. Kick it off and respond immediately;
+        // capturePacketsInBackground() sends a desktop notification when it
+        // actually finishes.
+        capturePacketsInBackground(opts);
+        send(res, 202, {
+          started: true,
+          durationSeconds: duration,
+          savedTo: resolvedSavePath,
+          message:
+            `Capture started in the background for ${duration}s. ` +
+            "A desktop notification will be sent when it's done" +
+            (resolvedSavePath ? ` (saving to ${resolvedSavePath})` : "") +
+            ".",
+        });
+        return;
+      }
+
+      send(res, 200, await capturePackets(opts));
     } catch (err) {
       send(res, 500, { error: err.message });
     }

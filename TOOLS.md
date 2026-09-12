@@ -62,6 +62,15 @@ a timestamped file under `~/Documents/pcaps/`, or to `save_path` if given —
 so a capture is never lost just because saving wasn't explicitly requested.
 Pass `no_save: true` to skip saving and get only the in-memory summary.
 
+Captures up to ~25s run synchronously and return their full summary in the
+same reply. Longer captures (up to 30 minutes, e.g. "run a pcap for 5
+minutes") run in the background instead — the tools agent responds
+immediately with a "started" acknowledgement, and sends a desktop
+notification (via the same `notify-send` mechanism reminders use, in
+`tools-agent/lib/notify.js`) with a short summary and the saved file path
+once the capture actually finishes. This avoids holding the chat request
+open (and risking an Ollama timeout) for a multi-minute capture.
+
 `capture_packets` needs the tools agent's `tcpdump` binary to have
 `cap_net_raw`/`cap_net_admin` capabilities (or run as root) — otherwise it
 returns a clear permission error. `scripts/setup-tools-agent.sh` offers to
