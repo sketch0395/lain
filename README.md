@@ -369,6 +369,36 @@ log line to see which subnet the container is really using.
   (`omarchy-theme-set`); the requested name is validated against the actual
   installed theme list before running anything.
 
+### Digital forensics tools
+
+- **Hash file** – compute MD5/SHA1/SHA256 of a file (streamed, so large
+  files don't get loaded into memory).
+- **File metadata** – size, created/modified/accessed/metadata-changed
+  timestamps, permissions, MIME type, and EXIF data for images (requires
+  `exiftool`, gracefully skipped if not installed).
+- **Extract strings** – printable strings from a binary/unknown file (like
+  the `strings` command), capped by file size and result count.
+- **List processes** – `ps`-style snapshot sorted by CPU or memory usage.
+- **Network connections** – active/listening sockets (via `ss`) — visible
+  processes are limited to what this OS user can already see, no privilege
+  escalation.
+- **Search logs** – search `journalctl` for a pattern, optionally since a
+  given time.
+- **Recent file activity** – files modified within the last N hours under a
+  directory, for building a quick timeline.
+- **Login history** – recent logins (`last`) and who's currently logged in
+  (`who`).
+- **Analyze pcap** – samples up to `limit` packets from a `.pcap`/`.pcapng`/
+  `.cap` file (via `tcpdump -r`) and reports protocol counts, top-talker
+  hosts, and a sample of raw packet lines. This is a sample-based summary
+  for large captures, not full-file analysis (no `tshark`/`capinfos`
+  dependency).
+
+Two optional system packages unlock extra detail: `tcpdump` (required for
+`analyze_pcap`) and `perl-image-exiftool`/`exiftool` (for EXIF in
+`file_metadata`) — install via your package manager, e.g. on Arch:
+`sudo pacman -S --needed tcpdump perl-image-exiftool`.
+
 ## Reminders & notifications
 
 Ask Lain to remind you about things in plain language — she'll figure out

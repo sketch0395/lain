@@ -3,8 +3,11 @@
 
 // lain-tools-agent — a small, read-only, token-authenticated HTTP service
 // that runs on the user's laptop and lets Lain check system diagnostics,
-// look at files (strictly within directories the user has allowed), and
-// read/change the Omarchy desktop (current theme, active window/workspace).
+// look at files (strictly within directories the user has allowed),
+// read/change the Omarchy desktop (current theme, active window/workspace),
+// and do basic digital-forensics-style investigation (file hashing/metadata,
+// string extraction, process/connection snapshots, log search, login
+// history, and pcap summaries).
 //
 // Security model:
 //   - Every request (except /health) requires a bearer token, compared
@@ -14,11 +17,19 @@
 //     `omarchy-theme-set` (theme switching, only after validating the
 //     requested name against the actual installed theme list) — neither
 //     can write/delete/read arbitrary files, and both run via execFile
-//     with fixed binaries and argument arrays (no shell involved).
+//     with fixed binaries and argument arrays (no shell involved). Every
+//     forensics command below is likewise a fixed binary with a fixed or
+//     validated argument array — no shell, no string interpolation.
 //   - Filesystem access is restricted to LAIN_TOOLS_ALLOWED_ROOTS
 //     (resolved to real, absolute paths) and further blocked from a
 //     denylist of sensitive paths (SSH/GPG keys, .env files, etc.) even if
-//     they happen to live inside an allowed root.
+//     they happen to live inside an allowed root. This applies to every
+//     forensics tool that takes a file/directory path.
+//   - System-wide tools (list_processes, network_connections, search_logs,
+//     login_history) aren't path-restricted since they don't read
+//     arbitrary files — they only report what the agent's own OS user can
+//     already see (no privilege escalation; e.g. `ss`/`ps` show only this
+//     user's own sockets/processes unless already running as root).
 //   - Refuses to start at all if LAIN_TOOLS_TOKEN isn't set.
 //
 // Install/run via scripts/setup-tools-agent.sh, which sets this up as a
@@ -33,6 +44,7 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 
 const OMARCHY_STATE_DIR = path.join(os.homedir(), ".local/state/omarchy/current");
+
 
 const PORT = Number(process.env.LAIN_TOOLS_PORT || 8787);
 const TOKEN = process.env.LAIN_TOOLS_TOKEN || "";
@@ -427,6 +439,263 @@ function readFileSafe(targetPath, maxBytes) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Digital-forensics-style tools. File-based ones (hash/metadata/strings/
+// pcap) go through isAllowed() like everything else above; the system-wide
+// ones (processes/connections/logs/login history) aren't path-restricted
+// since they only report what this OS user can already see.
+// ---------------------------------------------------------------------------
+
+const MAX_HASH_FILE_BYTES = 10 * 1024 * 1024 * 1024; // 10GB, streamed (not loaded into memory)
+const MAX_STRINGS_FILE_BYTES = 200 * 1024 * 1024; // 200MB — strings on bigger files gets slow/huge
+const IMAGE_EXTENSIONS_FOR_EXIF = new Set([
+  ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".heif", ".webp", ".gif", ".bmp", ".raw",
+]);
+const PCAP_EXTENSIONS = new Set([".pcap", ".pcapng", ".cap"]);
+
+function commandAvailable(bin) {
+  try {
+    execFileSync("which", [bin], { timeout: 3000, stdio: ["ignore", "ignore", "ignore"] });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Streams the file once through all requested digest algorithms in parallel
+// so a large file (e.g. a disk image) only needs to be read from disk once.
+function hashFile(targetPath, algorithms) {
+  const stat = fs.statSync(targetPath);
+  if (!stat.isFile()) throw new Error("not a file");
+  if (stat.size > MAX_HASH_FILE_BYTES) {
+    throw new Error(`file too large to hash (max ${MAX_HASH_FILE_BYTES} bytes)`);
+  }
+  const algos = algorithms && algorithms.length ? algorithms : ["md5", "sha1", "sha256"];
+  const hashes = algos.map((algo) => ({ algo, hash: crypto.createHash(algo) }));
+
+  return new Promise((resolve, reject) => {
+    const stream = fs.createReadStream(targetPath);
+    stream.on("data", (chunk) => {
+      for (const { hash } of hashes) hash.update(chunk);
+    });
+    stream.on("end", () => {
+      const result = { path: targetPath, size: stat.size };
+      for (const { algo, hash } of hashes) result[algo] = hash.digest("hex");
+      resolve(result);
+    });
+    stream.on("error", reject);
+  });
+}
+
+function fileMetadata(targetPath) {
+  const stat = fs.statSync(targetPath);
+  let mimeType = null;
+  let fileType = null;
+  try {
+    mimeType = execFileSync("file", ["--brief", "--mime-type", targetPath], {
+      encoding: "utf8",
+      timeout: 5000,
+    }).trim();
+  } catch {
+    // `file` not installed or failed — best-effort only.
+  }
+  try {
+    fileType = execFileSync("file", ["--brief", targetPath], {
+      encoding: "utf8",
+      timeout: 5000,
+    }).trim();
+  } catch {
+    // best-effort only
+  }
+
+  let exif = null;
+  const ext = path.extname(targetPath).toLowerCase();
+  if (stat.isFile() && IMAGE_EXTENSIONS_FOR_EXIF.has(ext) && commandAvailable("exiftool")) {
+    try {
+      const out = execFileSync("exiftool", ["-json", targetPath], {
+        encoding: "utf8",
+        timeout: 10000,
+        maxBuffer: 5 * 1024 * 1024,
+      });
+      const parsed = JSON.parse(out);
+      exif = parsed[0] || null;
+    } catch {
+      exif = null; // corrupt/unsupported image, or exiftool missing — best-effort
+    }
+  }
+
+  return {
+    path: targetPath,
+    isDirectory: stat.isDirectory(),
+    size: stat.size,
+    created: stat.birthtime.toISOString(),
+    modified: stat.mtime.toISOString(),
+    accessed: stat.atime.toISOString(),
+    metadataChanged: stat.ctime.toISOString(),
+    permissions: (stat.mode & 0o777).toString(8),
+    mimeType,
+    fileType,
+    exif,
+  };
+}
+
+function extractStrings(targetPath, { minLength, limit }) {
+  const stat = fs.statSync(targetPath);
+  if (!stat.isFile()) throw new Error("not a file");
+  if (stat.size > MAX_STRINGS_FILE_BYTES) {
+    throw new Error(`file too large for string extraction (max ${MAX_STRINGS_FILE_BYTES} bytes)`);
+  }
+  const out = execFileSync("strings", ["-n", String(minLength), targetPath], {
+    encoding: "utf8",
+    timeout: 20000,
+    maxBuffer: 50 * 1024 * 1024,
+  });
+  const lines = out.split("\n").filter(Boolean);
+  return { totalFound: lines.length, strings: lines.slice(0, limit), truncated: lines.length > limit };
+}
+
+// `ps aux`-style snapshot, sorted by CPU% descending. Only shows processes
+// visible to this OS user (no sudo/privilege escalation involved).
+function listProcesses(limit, sortBy) {
+  const sortFlag = sortBy === "mem" ? "-%mem" : "-%cpu";
+  const out = execFileSync("ps", ["axo", "pid,ppid,user,%cpu,%mem,etime,comm", "--sort=" + sortFlag], {
+    encoding: "utf8",
+    timeout: 5000,
+  });
+  const lines = out.trim().split("\n").slice(1); // drop header
+  const processes = lines.slice(0, limit).map((line) => {
+    const parts = line.trim().split(/\s+/);
+    const [pid, ppid, user, cpu, mem, etime, ...commParts] = parts;
+    return { pid, ppid, user, cpu, mem, etime, command: commParts.join(" ") };
+  });
+  return processes;
+}
+
+// Active/listening sockets visible to this OS user, via `ss` (no arbitrary
+// command construction — fixed flags only).
+function networkConnections(limit) {
+  const out = execFileSync("ss", ["-tunap"], { encoding: "utf8", timeout: 5000 });
+  const lines = out.trim().split("\n").slice(1); // drop header
+  return lines.slice(0, limit).map((line) => line.trim());
+}
+
+// journalctl search — query is passed as a single execFile argument (`-g`
+// pattern), never through a shell, so there's no injection risk regardless
+// of its contents.
+function searchLogs({ query, since, limit }) {
+  const args = ["-q", "--no-pager", "-n", String(limit), "-o", "short-iso"];
+  if (since) args.push("--since", since);
+  if (query) args.push("-g", query);
+  const out = execFileSync("journalctl", args, {
+    encoding: "utf8",
+    timeout: 10000,
+    maxBuffer: 10 * 1024 * 1024,
+  });
+  return out.trim().split("\n").filter(Boolean);
+}
+
+function recentFileActivity(root, { sinceHours, limit }) {
+  const cutoff = Date.now() - sinceHours * 3600 * 1000;
+  const results = [];
+  walk(
+    root,
+    (file) => {
+      if (results.length >= limit * 10) return; // oversample, then sort+trim below
+      let stat;
+      try {
+        stat = fs.statSync(file);
+      } catch {
+        return;
+      }
+      if (stat.mtimeMs >= cutoff) {
+        results.push({ path: file, modified: stat.mtime.toISOString(), size: stat.size });
+      }
+    },
+    { timeoutMs: 8000, maxEntries: 50000, stopEarly: () => results.length >= limit * 10 }
+  );
+  results.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+  return results.slice(0, limit);
+}
+
+function loginHistory(limit) {
+  let last = [];
+  try {
+    const out = execFileSync("last", ["-n", String(limit), "-F"], {
+      encoding: "utf8",
+      timeout: 5000,
+    });
+    last = out
+      .split("\n")
+      .filter((l) => l.trim() && !l.startsWith("wtmp begins"));
+  } catch {
+    // best-effort only
+  }
+  let currentlyLoggedIn = [];
+  try {
+    const out = execFileSync("who", [], { encoding: "utf8", timeout: 5000 });
+    currentlyLoggedIn = out.split("\n").filter(Boolean);
+  } catch {
+    // best-effort only
+  }
+  return { last, currentlyLoggedIn };
+}
+
+// Uses tcpdump (fixed flags, -c bounds runtime/output) to sample up to
+// `limit` packets from a pcap file and derive basic protocol/talker stats.
+// This is a sample-based summary, not a full-file analysis — no tshark/
+// capinfos dependency required.
+function analyzePcap(targetPath, limit) {
+  const ext = path.extname(targetPath).toLowerCase();
+  if (!PCAP_EXTENSIONS.has(ext)) {
+    throw new Error("not a recognized pcap file (.pcap/.pcapng/.cap)");
+  }
+  let out;
+  try {
+    out = execFileSync("tcpdump", ["-nn", "-r", targetPath, "-c", String(limit)], {
+      encoding: "utf8",
+      timeout: 20000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (err) {
+    // tcpdump can exit non-zero even when it produced useful stdout (e.g.
+    // link-type warnings) — fall back to whatever it did output.
+    if (err.stdout) out = err.stdout.toString();
+    else throw new Error(`tcpdump failed: ${err.message}`);
+  }
+
+  const lines = out.split("\n").filter(Boolean);
+  const talkers = {};
+  const protocols = {};
+  for (const line of lines) {
+    const hostMatch = line.match(/\bIP6?\s+(\S+)\s*[><]\s*(\S+):/);
+    if (hostMatch) {
+      const src = hostMatch[1].replace(/\.\d+$/, "");
+      const dst = hostMatch[2].replace(/\.\d+$/, "");
+      talkers[src] = (talkers[src] || 0) + 1;
+      talkers[dst] = (talkers[dst] || 0) + 1;
+    }
+    // tcpdump's default one-line format doesn't literally print "TCP" —
+    // it shows "Flags [...]" for TCP, "UDP, length N" for UDP, etc.
+    let proto = null;
+    if (/\bFlags \[/.test(line)) proto = "TCP";
+    else if (/\bUDP,/.test(line)) proto = "UDP";
+    else if (/\bICMP6?\b/.test(line)) proto = "ICMP";
+    else if (/^\S+\s+ARP,/.test(line)) proto = "ARP";
+    if (proto) protocols[proto] = (protocols[proto] || 0) + 1;
+  }
+  const topTalkers = Object.entries(talkers)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 15)
+    .map(([host, count]) => ({ host, count }));
+
+  return {
+    packetsSampled: lines.length,
+    protocolCounts: protocols,
+    topTalkers,
+    samplePackets: lines.slice(0, Math.min(50, lines.length)),
+  };
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
 
@@ -548,6 +817,81 @@ const server = http.createServer((req, res) => {
       const stat = fs.statSync(resolved);
       if (!stat.isFile()) return send(res, 400, { error: "not a file" });
       return send(res, 200, readFileSafe(resolved, maxBytes));
+    }
+
+    if (url.pathname === "/hash") {
+      const p = url.searchParams.get("path") || "";
+      const algosParam = url.searchParams.get("algorithms");
+      if (!p) return send(res, 400, { error: "path is required" });
+      const resolved = resolveInputPath(p);
+      if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
+      const algos = algosParam
+        ? algosParam.split(",").map((a) => a.trim().toLowerCase()).filter(Boolean)
+        : null;
+      return hashFile(resolved, algos)
+        .then((result) => send(res, 200, result))
+        .catch((err) => send(res, 500, { error: err.message }));
+    }
+
+    if (url.pathname === "/metadata") {
+      const p = url.searchParams.get("path") || "";
+      if (!p) return send(res, 400, { error: "path is required" });
+      const resolved = resolveInputPath(p);
+      if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
+      return send(res, 200, fileMetadata(resolved));
+    }
+
+    if (url.pathname === "/strings") {
+      const p = url.searchParams.get("path") || "";
+      const minLength = Math.max(Number(url.searchParams.get("minLength")) || 4, 1);
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 200, 2000);
+      if (!p) return send(res, 400, { error: "path is required" });
+      const resolved = resolveInputPath(p);
+      if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
+      return send(res, 200, extractStrings(resolved, { minLength, limit }));
+    }
+
+    if (url.pathname === "/processes") {
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 100);
+      const sortBy = url.searchParams.get("sortBy") === "mem" ? "mem" : "cpu";
+      return send(res, 200, { processes: listProcesses(limit, sortBy) });
+    }
+
+    if (url.pathname === "/connections") {
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
+      return send(res, 200, { connections: networkConnections(limit) });
+    }
+
+    if (url.pathname === "/logs") {
+      const query = url.searchParams.get("q") || "";
+      const since = url.searchParams.get("since") || "";
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
+      return send(res, 200, { lines: searchLogs({ query, since, limit }) });
+    }
+
+    if (url.pathname === "/recent-activity") {
+      const rootArg = url.searchParams.get("root");
+      const sinceHours = Math.max(Number(url.searchParams.get("sinceHours")) || 24, 0.1);
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 50, 200);
+      const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
+      if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+      const stat = fs.statSync(root);
+      if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
+      return send(res, 200, { root, files: recentFileActivity(root, { sinceHours, limit }) });
+    }
+
+    if (url.pathname === "/login-history") {
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 100);
+      return send(res, 200, loginHistory(limit));
+    }
+
+    if (url.pathname === "/pcap") {
+      const p = url.searchParams.get("path") || "";
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 500, 5000);
+      if (!p) return send(res, 400, { error: "path is required" });
+      const resolved = resolveInputPath(p);
+      if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
+      return send(res, 200, analyzePcap(resolved, limit));
     }
 
     return send(res, 404, { error: "not found" });

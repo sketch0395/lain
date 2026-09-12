@@ -65,9 +65,18 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "every file directly inside a directory at once (e.g. 'summarize the " +
   "files in my Downloads folder' -> use summarize_directory with root set " +
   "to that folder, then write an actual summary in your own words from " +
-  "what comes back — don't just paste the raw file contents). Only use " +
-  "these tools when the user is actually asking about their computer or " +
-  "files.";
+  "what comes back — don't just paste the raw file contents). " +
+  "\n\nYou also have digital-forensics tools: hash_file (MD5/SHA1/SHA256), " +
+  "file_metadata (timestamps, permissions, MIME type, EXIF for images), " +
+  "extract_strings (printable strings from a binary), list_processes, " +
+  "network_connections, search_logs (journalctl), recent_file_activity " +
+  "(files modified in the last N hours — good for building a timeline), " +
+  "login_history (last/who), and analyze_pcap (protocol/top-talker summary " +
+  "of a .pcap/.pcapng file). Use these when the user asks you to " +
+  "investigate a file, check for suspicious activity, or otherwise act as " +
+  "a forensics analyst — explain findings in plain language, not just raw " +
+  "tool output. Only use any of these tools when the user is actually " +
+  "asking about their computer or files.";
 
 function currentTimeAddendum() {
   const now = new Date();
