@@ -47,7 +47,8 @@ log "Now at $(git rev-parse --short HEAD)."
 if systemctl --user list-unit-files lain-tools-agent.service >/dev/null 2>&1; then
   log "Resyncing tools agent..."
   mkdir -p "$HOME/.local/share/lain"
-  cp "$REPO_DIR/tools-agent/server.js" "$HOME/.local/share/lain/tools-agent.js"
+  rm -rf "$HOME/.local/share/lain/tools-agent"
+  cp -r "$REPO_DIR/tools-agent" "$HOME/.local/share/lain/tools-agent"
   # Restarting kills this script's own parent process group if it was
   # spawned by the tools agent — that's fine, we're detached and keep
   # running independently to finish the job below.

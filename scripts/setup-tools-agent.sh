@@ -4,7 +4,8 @@
 # tools-agent/server.js).
 #
 # What it does:
-#   1. Copies tools-agent/server.js to ~/.local/share/lain/tools-agent.js
+#   1. Copies the tools-agent/ directory (server.js + lib/) to
+#      ~/.local/share/lain/tools-agent/
 #   2. Generates an LAIN_TOOLS_TOKEN (if one doesn't already exist) and
 #      writes config to ~/.config/lain/tools-agent.env
 #   3. Installs + enables a systemd --user unit that runs it on login/boot
@@ -85,8 +86,9 @@ if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
 fi
 
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$UNIT_DIR"
-cp "$REPO_DIR/tools-agent/server.js" "$INSTALL_DIR/tools-agent.js"
-echo "  - copied server.js -> $INSTALL_DIR/tools-agent.js"
+rm -rf "$INSTALL_DIR/tools-agent"
+cp -r "$REPO_DIR/tools-agent" "$INSTALL_DIR/tools-agent"
+echo "  - copied tools-agent/ -> $INSTALL_DIR/tools-agent"
 
 # --- Config: port, allowed roots, token -------------------------------------
 LAIN_TOOLS_PORT="${LAIN_TOOLS_PORT:-}"
@@ -130,7 +132,7 @@ After=network.target
 
 [Service]
 EnvironmentFile=$ENV_FILE
-ExecStart=$NODE_BIN $INSTALL_DIR/tools-agent.js
+ExecStart=$NODE_BIN $INSTALL_DIR/tools-agent/server.js
 Restart=on-failure
 RestartSec=5
 

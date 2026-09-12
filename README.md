@@ -332,7 +332,8 @@ opt-in and off by default.
 ./scripts/setup-tools-agent.sh
 ```
 
-This installs the agent to `~/.local/share/lain/tools-agent.js`, prompts
+This installs the agent (server.js plus its `lib/` modules) to
+`~/.local/share/lain/tools-agent/`, prompts
 for (or accepts as env vars) a port, allowed root directories, and
 generates/reuses an auth token, then registers and starts it as a
 `systemd --user` service (`lain-tools-agent.service`). It prints the
