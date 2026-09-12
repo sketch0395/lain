@@ -22,6 +22,10 @@
 # and EXIF data in file_metadata (needs `exiftool`) — this script offers to
 # install both automatically via pacman if missing.
 #
+# check_for_updates/update_lain also run through this agent (git fetch/pull
+# + rebuild happen on the host, not inside Lain's sandboxed container) —
+# LAIN_REPO_DIR is set automatically to wherever this script lives.
+#
 # Env overrides (optional, otherwise you'll be prompted):
 #   LAIN_TOOLS_PORT           default 8787
 #   LAIN_TOOLS_ALLOWED_ROOTS  comma-separated dirs Lain may read (default: $HOME)
@@ -112,6 +116,7 @@ cat > "$ENV_FILE" <<EOF
 LAIN_TOOLS_PORT=$LAIN_TOOLS_PORT
 LAIN_TOOLS_ALLOWED_ROOTS=$LAIN_TOOLS_ALLOWED_ROOTS
 LAIN_TOOLS_TOKEN=$LAIN_TOOLS_TOKEN
+LAIN_REPO_DIR=$REPO_DIR
 EOF
 chmod 600 "$ENV_FILE"
 echo "  - wrote config -> $ENV_FILE (chmod 600)"

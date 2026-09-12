@@ -5,9 +5,11 @@
 // that runs on the user's laptop and lets Lain check system diagnostics,
 // look at files (strictly within directories the user has allowed),
 // read/change the Omarchy desktop (current theme, active window/workspace),
-// and do basic digital-forensics-style investigation (file hashing/metadata,
+// do basic digital-forensics-style investigation (file hashing/metadata,
 // string extraction, process/connection snapshots, log search, login
-// history, and pcap summaries).
+// history, and pcap summaries), and check for / apply Lain updates from
+// the git repo (the only tools that touch anything outside the sandboxed
+// Docker container, which is why updating has to happen here).
 //
 // Security model:
 //   - Every request (except /health) requires a bearer token, compared
@@ -41,13 +43,18 @@ const os = require("node:os");
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 
 const OMARCHY_STATE_DIR = path.join(os.homedir(), ".local/state/omarchy/current");
 
 
 const PORT = Number(process.env.LAIN_TOOLS_PORT || 8787);
 const TOKEN = process.env.LAIN_TOOLS_TOKEN || "";
+// Where the Lain git repo lives on disk — used only by check_for_updates /
+// update_lain (git fetch/log, and kicking off scripts/update.sh). Not set
+// up as an allowed filesystem root; those two tools are the only ones that
+// touch it, via fixed git subcommands / a fixed script path.
+const REPO_DIR = process.env.LAIN_REPO_DIR || "";
 const ALLOWED_ROOTS = (process.env.LAIN_TOOLS_ALLOWED_ROOTS || os.homedir())
   .split(",")
   .map((p) => p.trim())
@@ -248,6 +255,82 @@ function omarchySetTheme(themeName) {
   }
   execFileSync("omarchy-theme-set", [themeName], { timeout: 10000 });
   return { theme: themeName };
+}
+
+function requireRepoDir() {
+  if (!REPO_DIR) {
+    throw new Error(
+      "LAIN_REPO_DIR is not configured on the tools agent — re-run " +
+        "scripts/setup-tools-agent.sh to set it."
+    );
+  }
+  if (!fs.existsSync(path.join(REPO_DIR, ".git"))) {
+    throw new Error(`LAIN_REPO_DIR (${REPO_DIR}) doesn't look like a git repo.`);
+  }
+}
+
+function git(args, timeout = 15000) {
+  return execFileSync("git", ["-C", REPO_DIR, ...args], {
+    encoding: "utf8",
+    timeout,
+  }).trim();
+}
+
+// Fetches from the remote and reports how far behind the current branch
+// is — read-only (fetch updates .git's remote-tracking refs, never the
+// working tree), used by the check_for_updates tool.
+function checkForUpdates() {
+  requireRepoDir();
+  git(["fetch", "--quiet"], 30000);
+  const branch = git(["rev-parse", "--abbrev-ref", "HEAD"]);
+  const local = git(["rev-parse", "HEAD"]);
+  let remote;
+  try {
+    remote = git(["rev-parse", "@{u}"]);
+  } catch {
+    throw new Error(`Branch "${branch}" has no upstream tracking branch configured.`);
+  }
+
+  const upToDate = local === remote;
+  let commitsBehind = 0;
+  let commits = [];
+  if (!upToDate) {
+    commitsBehind = Number(git(["rev-list", "--count", `${local}..${remote}`])) || 0;
+    commits = git(["log", `${local}..${remote}`, "--oneline", "--max-count=20"])
+      .split("\n")
+      .filter(Boolean);
+  }
+
+  return {
+    branch,
+    upToDate,
+    localCommit: local.slice(0, 7),
+    remoteCommit: remote.slice(0, 7),
+    commitsBehind,
+    commits,
+  };
+}
+
+// Kicks off scripts/update.sh (git pull + resync tools agent + rebuild/
+// restart the Lain container) as a detached background process, so it can
+// finish restarting lain-tools-agent itself without killing this HTTP
+// response mid-flight. Progress is written to a log file the caller can
+// mention, but we don't wait around to tail it.
+function startUpdate() {
+  requireRepoDir();
+  const scriptPath = path.join(REPO_DIR, "scripts", "update.sh");
+  if (!fs.existsSync(scriptPath)) {
+    throw new Error("scripts/update.sh not found in the repo — pull the latest changes first.");
+  }
+  const logPath = path.join(os.tmpdir(), `lain-update-${Date.now()}.log`);
+  const logFd = fs.openSync(logPath, "a");
+  const child = spawn("bash", [scriptPath], {
+    cwd: REPO_DIR,
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+  });
+  child.unref();
+  return { started: true, logFile: logPath };
 }
 
 function walk(root, visit, opts = {}) {
@@ -883,6 +966,14 @@ const server = http.createServer((req, res) => {
     if (url.pathname === "/login-history") {
       const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 100);
       return send(res, 200, loginHistory(limit));
+    }
+
+    if (url.pathname === "/check-updates" && req.method === "GET") {
+      return send(res, 200, checkForUpdates());
+    }
+
+    if (url.pathname === "/update" && req.method === "POST") {
+      return send(res, 200, startUpdate());
     }
 
     if (url.pathname === "/pcap") {

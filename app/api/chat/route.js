@@ -76,7 +76,14 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "investigate a file, check for suspicious activity, or otherwise act as " +
   "a forensics analyst — explain findings in plain language, not just raw " +
   "tool output. Only use any of these tools when the user is actually " +
-  "asking about their computer or files.";
+  "asking about their computer or files." +
+  "\n\nYou also have check_for_updates and update_lain: use check_for_updates " +
+  "when the user asks if there's a new version / updates available for you " +
+  "(Lain) — it reports how many commits behind the local checkout is and " +
+  "what changed. If they ask you to update, walk them through it: confirm " +
+  "they want to proceed, mention it'll briefly restart the app (a few " +
+  "minutes), then call update_lain. Don't call update_lain unprompted or " +
+  "without the user clearly wanting to update right now.";
 
 function currentTimeAddendum() {
   const now = new Date();

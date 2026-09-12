@@ -426,6 +426,25 @@ do manually on a fresh Omarchy install. On a non-Arch system, or if you
 skip the prompt, install them yourself: `sudo pacman -S --needed tcpdump
 perl-image-exiftool` (or your distro's equivalent).
 
+### Keeping Lain up to date
+
+Just ask, e.g. "are there any updates?" or "check for updates":
+
+- **Check for updates** – fetches from the git remote and reports how many
+  commits behind the local checkout is (with a short changelog), without
+  changing anything.
+- **Update** – if you ask Lain to update, she'll confirm, then pull the
+  latest changes and rebuild/restart both the main container and the tools
+  agent (if it changed). This briefly interrupts the current session (a
+  container rebuild + restart, usually well under a minute).
+
+Both run on the host via the tools agent (`scripts/update.sh`), since
+pulling/rebuilding needs access outside Lain's sandboxed Docker container —
+so this only works if the tools agent is set up (see above) and
+`LAIN_REPO_DIR` is configured (done automatically by
+`scripts/setup-tools-agent.sh`). You can also just run
+`./scripts/update.sh` yourself any time from the repo directory.
+
 ## Reminders & notifications
 
 Ask Lain to remind you about things in plain language — she'll figure out
