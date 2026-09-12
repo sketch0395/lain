@@ -99,6 +99,22 @@ function expandHome(p) {
   return p;
 }
 
+// People (and the model) naturally say things like "/Projects/foo" meaning
+// "the Projects folder in my home directory", not the real filesystem root.
+// If a path doesn't resolve as given, try it again relative to the home
+// directory before giving up — this covers that case without silently
+// escaping the allowed roots (the final isAllowed() check still applies).
+function resolveInputPath(p) {
+  const home = os.homedir();
+  const asGiven = path.resolve(expandHome(p));
+  if (fs.existsSync(asGiven)) return asGiven;
+  if (!asGiven.startsWith(home + path.sep) && asGiven !== home) {
+    const homeRelative = path.resolve(path.join(home, p));
+    if (fs.existsSync(homeRelative)) return homeRelative;
+  }
+  return asGiven;
+}
+
 function isAllowed(targetPath) {
   let real;
   try {
@@ -460,7 +476,7 @@ const server = http.createServer((req, res) => {
       const rootArg = url.searchParams.get("root");
       const limit = Math.min(Number(url.searchParams.get("limit")) || 30, 100);
       if (!query) return send(res, 400, { error: "q is required" });
-      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
+      const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
       if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
       return send(res, 200, { results: findFiles(query, root, limit) });
     }
@@ -470,7 +486,7 @@ const server = http.createServer((req, res) => {
       const rootArg = url.searchParams.get("root");
       const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 50);
       if (!query) return send(res, 400, { error: "q is required" });
-      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
+      const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
       if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
       return send(res, 200, { results: searchFiles(query, root, limit) });
     }
@@ -478,7 +494,7 @@ const server = http.createServer((req, res) => {
     if (url.pathname === "/list") {
       const rootArg = url.searchParams.get("root");
       const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
-      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
+      const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
       if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
       const stat = fs.statSync(root);
       if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
@@ -496,7 +512,7 @@ const server = http.createServer((req, res) => {
         Number(url.searchParams.get("maxTotalBytes")) || 30000,
         100000
       );
-      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
+      const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
       if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
       const stat = fs.statSync(root);
       if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
@@ -527,7 +543,7 @@ const server = http.createServer((req, res) => {
       const p = url.searchParams.get("path") || "";
       const maxBytes = Math.min(Number(url.searchParams.get("max")) || 20000, 100000);
       if (!p) return send(res, 400, { error: "path is required" });
-      const resolved = path.resolve(expandHome(p));
+      const resolved = resolveInputPath(p);
       if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
       const stat = fs.statSync(resolved);
       if (!stat.isFile()) return send(res, 400, { error: "not a file" });
