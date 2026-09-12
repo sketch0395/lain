@@ -382,53 +382,20 @@ log line to see which subnet the container is really using.
 
 ### Available tools
 
-- **System diagnostics** – uptime, CPU/memory/disk usage.
-- **Find files** – search for files by name under an allowed directory.
-- **Search files** – search file contents for a text match.
-- **Read file** – read (and summarize) the contents of a specific file.
-- **List directory** – list a directory's contents (e.g. "what's in my
-  Downloads folder?").
-- **Summarize directory** – read and summarize the top-level text files in
-  a directory (skips binaries and oversized files).
-- **Omarchy status** – current theme, active window, active workspace, and
-  connected monitors (via `hyprctl`).
-- **List Omarchy themes** – installed theme names (`omarchy-theme-list`).
-- **Set Omarchy theme** – switch the desktop to a different installed theme
-  (`omarchy-theme-set`); the requested name is validated against the actual
-  installed theme list before running anything.
+Full details (params, endpoints, implementation) are in
+[TOOLS.md](TOOLS.md). In short, Lain can: check system diagnostics; find,
+search, list, read, and summarize files/directories; check and switch the
+Omarchy theme; and run digital-forensics-style checks (file hashing,
+metadata/EXIF, string extraction, running processes, network connections,
+log search, recent file activity, login history, and pcap analysis).
 
-### Digital forensics tools
-
-- **Hash file** – compute MD5/SHA1/SHA256 of a file (streamed, so large
-  files don't get loaded into memory).
-- **File metadata** – size, created/modified/accessed/metadata-changed
-  timestamps, permissions, MIME type, and EXIF data for images (requires
-  `exiftool`, gracefully skipped if not installed).
-- **Extract strings** – printable strings from a binary/unknown file (like
-  the `strings` command), capped by file size and result count.
-- **List processes** – `ps`-style snapshot sorted by CPU or memory usage.
-- **Network connections** – active/listening sockets (via `ss`) — visible
-  processes are limited to what this OS user can already see, no privilege
-  escalation.
-- **Search logs** – search `journalctl` for a pattern, optionally since a
-  given time.
-- **Recent file activity** – files modified within the last N hours under a
-  directory, for building a quick timeline.
-- **Login history** – recent logins (`last`) and who's currently logged in
-  (`who`).
-- **Analyze pcap** – samples up to `limit` packets from a `.pcap`/`.pcapng`/
-  `.cap` file (via `tcpdump -r`) and reports protocol counts, top-talker
-  hosts, and a sample of raw packet lines. This is a sample-based summary
-  for large captures, not full-file analysis (no `tshark`/`capinfos`
-  dependency).
-
-Two optional system packages unlock extra detail: `tcpdump` (required for
-`analyze_pcap`) and `perl-image-exiftool`/`exiftool` (for EXIF in
-`file_metadata`). `scripts/setup-tools-agent.sh` detects if either is
-missing and offers to install them via `pacman` automatically — nothing to
-do manually on a fresh Omarchy install. On a non-Arch system, or if you
-skip the prompt, install them yourself: `sudo pacman -S --needed tcpdump
-perl-image-exiftool` (or your distro's equivalent).
+Two optional system packages unlock extra forensics detail: `tcpdump`
+(required for `analyze_pcap`) and `perl-image-exiftool`/`exiftool` (for
+EXIF in `file_metadata`). `scripts/setup-tools-agent.sh` detects if either
+is missing and offers to install them via `pacman` automatically —
+nothing to do manually on a fresh Omarchy install. On a non-Arch system,
+or if you skip the prompt, install them yourself: `sudo pacman -S --needed
+tcpdump perl-image-exiftool` (or your distro's equivalent).
 
 ### Keeping Lain up to date
 
