@@ -47,6 +47,7 @@ denylist (see `tools-agent/lib/paths.js`).
 | `recent_file_activity`    | Files modified within the last N hours under a directory             | `root`, `since_hours`, `limit`       | `GET /recent-activity`  | `tools-agent/lib/forensics.js`       |
 | `login_history`           | Recent logins (`last`) + who's currently logged in (`who`)            | `limit`                              | `GET /login-history`   | `tools-agent/lib/forensics.js`       |
 | `analyze_pcap`            | Sample packets from a `.pcap`/`.pcapng`/`.cap` (via `tcpdump -r`)     | `path`, `limit`                      | `GET /pcap`             | `tools-agent/lib/forensics.js`       |
+| `capture_packets`         | Live packet capture for a bounded time/count (via `tcpdump`), optional save to `.pcap` | `interface`, `filter`, `duration`, `limit`, `save_path` | `POST /capture` | `tools-agent/lib/forensics.js`       |
 | `omarchy_status`          | Current theme, active window/workspace, monitors (`hyprctl`)         | —                                    | `GET /omarchy/status`   | `tools-agent/lib/omarchy.js`         |
 | `list_omarchy_themes`     | Installed theme names (`omarchy-theme-list`)                          | —                                    | `GET /omarchy/themes`   | `tools-agent/lib/omarchy.js`         |
 | `set_omarchy_theme`       | Switch the desktop theme (`omarchy-theme-set`, name-validated)        | `theme`                              | `POST /omarchy/theme`  | `tools-agent/lib/omarchy.js`         |
@@ -55,6 +56,11 @@ denylist (see `tools-agent/lib/paths.js`).
 The agent also exposes `GET /health` (unauthenticated liveness check) and
 `POST /notify` (desktop notifications for fired reminders — not exposed as
 an LLM tool, called directly by `lib/notify.js`).
+
+`capture_packets` needs the tools agent's `tcpdump` binary to have
+`cap_net_raw`/`cap_net_admin` capabilities (or run as root) — otherwise it
+returns a clear permission error. `scripts/setup-tools-agent.sh` offers to
+grant this automatically via `setcap`.
 
 ## Built-in tools (always available)
 

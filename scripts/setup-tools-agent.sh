@@ -19,9 +19,13 @@
 #
 # Forensics tools (hash_file, file_metadata, extract_strings, list_processes,
 # network_connections, search_logs, recent_file_activity, login_history,
-# analyze_pcap) work out of the box, except analyze_pcap (needs `tcpdump`)
-# and EXIF data in file_metadata (needs `exiftool`) — this script offers to
-# install both automatically via pacman if missing.
+# analyze_pcap, capture_packets) work out of the box, except analyze_pcap/
+# capture_packets (need `tcpdump`) and EXIF data in file_metadata (needs
+# `exiftool`) — this script offers to install both automatically via pacman
+# if missing. capture_packets additionally needs tcpdump to be able to open
+# a live network interface without root — this script offers to grant that
+# via `setcap` (cap_net_raw,cap_net_admin) so the agent (running as your
+# regular user) can use it.
 #
 # check_for_updates/update_lain also run through this agent (git fetch/pull
 # + rebuild happen on the host, not inside Lain's sandboxed container) —
@@ -82,6 +86,34 @@ if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
     echo "  - pacman not found (non-Arch system) — install the equivalent" >&2
     echo "    packages for tcpdump/exiftool manually if you want analyze_pcap" >&2
     echo "    and image EXIF data to work." >&2
+  fi
+fi
+
+# --- tcpdump packet-capture capability --------------------------------------
+# capture_packets needs tcpdump to open a live network interface, which
+# normally requires root. Instead of running the whole agent as root, grant
+# just that capability to the tcpdump binary itself (standard practice —
+# this is exactly what Wireshark's install docs recommend too). Optional:
+# if skipped or it fails, capture_packets returns a clear permission error
+# telling the user how to fix it later.
+if command -v tcpdump >/dev/null 2>&1; then
+  tcpdump_bin="$(command -v tcpdump)"
+  if command -v getcap >/dev/null 2>&1 && getcap "$tcpdump_bin" 2>/dev/null | grep -q cap_net_raw; then
+    echo "==> tcpdump already has packet-capture permissions"
+  else
+    echo "==> Granting tcpdump packet-capture permissions (for capture_packets)"
+    if [[ -t 0 ]]; then
+      read -r -p "Run 'sudo setcap cap_net_raw,cap_net_admin+eip $tcpdump_bin' now? [Y/n] " reply
+    else
+      reply="n"
+    fi
+    if [[ ! "$reply" =~ ^[Nn] ]]; then
+      sudo setcap cap_net_raw,cap_net_admin+eip "$tcpdump_bin" \
+        && echo "  - granted — capture_packets can now run without root." \
+        || echo "  - setcap failed — capture_packets will need root or manual setup." >&2
+    else
+      echo "  - skipping — capture_packets will error with instructions until this is run."
+    fi
   fi
 fi
 

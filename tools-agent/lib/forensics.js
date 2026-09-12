@@ -6,7 +6,7 @@ const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
 const { ALLOWED_ROOTS } = require("./config");
 const { resolveInputPath, isAllowed, walk } = require("./paths");
-const { send } = require("./http");
+const { send, readJsonBody } = require("./http");
 
 // ---------------------------------------------------------------------------
 // Digital-forensics-style tools. File-based ones (hash/metadata/strings/
@@ -209,29 +209,10 @@ function loginHistory(limit) {
   return { last, currentlyLoggedIn };
 }
 
-// Uses tcpdump (fixed flags, -c bounds runtime/output) to sample up to
-// `limit` packets from a pcap file and derive basic protocol/talker stats.
-// This is a sample-based summary, not a full-file analysis — no tshark/
-// capinfos dependency required.
-function analyzePcap(targetPath, limit) {
-  const ext = path.extname(targetPath).toLowerCase();
-  if (!PCAP_EXTENSIONS.has(ext)) {
-    throw new Error("not a recognized pcap file (.pcap/.pcapng/.cap)");
-  }
-  let out;
-  try {
-    out = execFileSync("tcpdump", ["-nn", "-r", targetPath, "-c", String(limit)], {
-      encoding: "utf8",
-      timeout: 20000,
-      maxBuffer: 20 * 1024 * 1024,
-    });
-  } catch (err) {
-    // tcpdump can exit non-zero even when it produced useful stdout (e.g.
-    // link-type warnings) — fall back to whatever it did output.
-    if (err.stdout) out = err.stdout.toString();
-    else throw new Error(`tcpdump failed: ${err.message}`);
-  }
-
+// Shared by analyzePcap (reads a saved file) and capturePackets (reads
+// live traffic) — turns tcpdump's default one-line-per-packet stdout into
+// protocol counts + top-talker host stats.
+function summarizeTcpdumpOutput(out) {
   const lines = out.split("\n").filter(Boolean);
   const talkers = {};
   const protocols = {};
@@ -263,6 +244,116 @@ function analyzePcap(targetPath, limit) {
     topTalkers,
     samplePackets: lines.slice(0, Math.min(50, lines.length)),
   };
+}
+
+// Uses tcpdump (fixed flags, -c bounds runtime/output) to sample up to
+// `limit` packets from a pcap file and derive basic protocol/talker stats.
+// This is a sample-based summary, not a full-file analysis — no tshark/
+// capinfos dependency required.
+function analyzePcap(targetPath, limit) {
+  const ext = path.extname(targetPath).toLowerCase();
+  if (!PCAP_EXTENSIONS.has(ext)) {
+    throw new Error("not a recognized pcap file (.pcap/.pcapng/.cap)");
+  }
+  let out;
+  try {
+    out = execFileSync("tcpdump", ["-nn", "-r", targetPath, "-c", String(limit)], {
+      encoding: "utf8",
+      timeout: 20000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (err) {
+    // tcpdump can exit non-zero even when it produced useful stdout (e.g.
+    // link-type warnings) — fall back to whatever it did output.
+    if (err.stdout) out = err.stdout.toString();
+    else throw new Error(`tcpdump failed: ${err.message}`);
+  }
+
+  return summarizeTcpdumpOutput(out);
+}
+
+const CAPTURE_DEFAULT_DURATION_SECONDS = 10;
+const CAPTURE_MAX_DURATION_SECONDS = 60;
+const CAPTURE_DEFAULT_PACKET_LIMIT = 100;
+const CAPTURE_MAX_PACKET_LIMIT = 2000;
+
+// Live packet capture, bounded on both ends: `timeout` kills tcpdump after
+// `durationSeconds` no matter what, and `-c` stops it early once
+// `packetLimit` packets are seen. Requires either running as root or the
+// tcpdump binary having the cap_net_raw/cap_net_admin capabilities set
+// (setup-tools-agent.sh offers to do this) — otherwise it fails clearly.
+//
+// `filterExpr`, if given, is a BPF filter (e.g. "tcp port 443", "host
+// 8.8.8.8"). It's split on whitespace into separate execFile arguments —
+// never passed through a shell — so there's no injection risk regardless
+// of its contents, though it does mean quoted/escaped BPF tokens aren't
+// supported (not needed for the simple filters this is meant for).
+function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimit, savePath }) {
+  if (!commandAvailable("tcpdump")) {
+    throw new Error(
+      "tcpdump is not installed — install it (e.g. `sudo pacman -S tcpdump`) to capture packets."
+    );
+  }
+
+  const iface = interfaceName || "any";
+  const duration = Math.min(
+    Math.max(Number(durationSeconds) || CAPTURE_DEFAULT_DURATION_SECONDS, 1),
+    CAPTURE_MAX_DURATION_SECONDS
+  );
+  const limit = Math.min(
+    Math.max(Number(packetLimit) || CAPTURE_DEFAULT_PACKET_LIMIT, 1),
+    CAPTURE_MAX_PACKET_LIMIT
+  );
+  const filterArgs = filterExpr ? String(filterExpr).trim().split(/\s+/).filter(Boolean) : [];
+
+  let resolvedSavePath = null;
+  if (savePath) {
+    resolvedSavePath = resolveInputPath(savePath);
+    if (!isAllowed(resolvedSavePath)) throw new Error("save path not allowed");
+    if (!PCAP_EXTENSIONS.has(path.extname(resolvedSavePath).toLowerCase())) {
+      resolvedSavePath += ".pcap";
+    }
+  }
+
+  const baseArgs = ["-nn", "-i", iface, "-c", String(limit)];
+  const args = resolvedSavePath
+    ? [...baseArgs, "-w", resolvedSavePath, ...filterArgs]
+    : [...baseArgs, ...filterArgs];
+
+  let out = "";
+  try {
+    out = execFileSync("timeout", [`${duration}s`, "tcpdump", ...args], {
+      encoding: "utf8",
+      // A little longer than `duration` so `timeout` itself is what stops
+      // tcpdump, not Node's own timeout mid-write.
+      timeout: (duration + 10) * 1000,
+      maxBuffer: 20 * 1024 * 1024,
+    });
+  } catch (err) {
+    // `timeout` exits 124 when it has to kill tcpdump — expected, not an
+    // error, as long as we got output. Permission errors (no root/no
+    // capabilities) come through stderr instead.
+    if (err.stdout !== undefined) out = err.stdout.toString();
+    const stderr = (err.stderr || "").toString();
+    if (!out && /permission|not permitted|cap_net_raw/i.test(stderr)) {
+      throw new Error(
+        "tcpdump couldn't open the interface (permission denied). Grant it packet-capture " +
+          "rights, e.g. `sudo setcap cap_net_raw,cap_net_admin+eip $(command -v tcpdump)`, " +
+          "then try again."
+      );
+    }
+    if (!out && stderr) throw new Error(`tcpdump failed: ${stderr.trim()}`);
+    if (!out && !resolvedSavePath) throw new Error(`tcpdump failed: ${err.message}`);
+  }
+
+  if (resolvedSavePath) {
+    // With -w, tcpdump doesn't print decoded packet lines — read back the
+    // file it just wrote to build the same summary shape as analyzePcap.
+    const summary = analyzePcap(resolvedSavePath, limit);
+    return { ...summary, savedTo: resolvedSavePath };
+  }
+
+  return summarizeTcpdumpOutput(out);
 }
 
 function registerRoutes(router) {
@@ -340,6 +431,27 @@ function registerRoutes(router) {
     if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
     return send(res, 200, analyzePcap(resolved, limit));
   });
+
+  // POST (not GET) since this actively runs a live capture for a bounded
+  // duration rather than just reading existing state.
+  router.post("/capture", async (req, res) => {
+    const body = await readJsonBody(req);
+    try {
+      send(
+        res,
+        200,
+        capturePackets({
+          interfaceName: body.interface,
+          filterExpr: body.filter,
+          durationSeconds: body.duration,
+          packetLimit: body.limit,
+          savePath: body.savePath,
+        })
+      );
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
 }
 
 module.exports = {
@@ -353,5 +465,6 @@ module.exports = {
   recentFileActivity,
   loginHistory,
   analyzePcap,
+  capturePackets,
   registerRoutes,
 };
