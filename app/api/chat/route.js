@@ -56,7 +56,27 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "ongoing projects, habits, things they care about). Use it proactively " +
   "and silently whenever the user shares something worth remembering long-" +
   "term — don't ask permission first, and don't announce that you saved it " +
-  "unless it fits naturally. Do NOT use it for trivial or one-off details.";
+  "unless it fits naturally. Do NOT use it for trivial or one-off details.\n\n" +
+  "You also have check_for_updates: use it whenever the user asks if " +
+  "there's a new version / updates available for you (Lain) — it reports " +
+  "how many commits you're behind the public GitHub repo and what changed. " +
+  "This always works, regardless of anything else being set up.";
+
+const UPDATE_APPLY_PROMPT_ADDENDUM =
+  "\n\nYou also have update_lain: if the user asks you to update after " +
+  "check_for_updates showed something to pull, confirm they want to " +
+  "proceed, mention it'll briefly restart the app (usually under a " +
+  "minute), then call update_lain. Don't call it unprompted.";
+
+const UPDATE_MANUAL_PROMPT_ADDENDUM =
+  "\n\nYou do NOT have the ability to apply an update yourself right now — " +
+  "the local tools agent isn't configured, so update_lain isn't available " +
+  "(only check_for_updates is). If the user asks you to update, explain " +
+  "that and tell them to run one of these themselves from the Lain repo " +
+  "directory on their machine: `./scripts/update.sh`, or manually " +
+  "`git pull && ./deploy.sh`. Mention that setting up the tools agent " +
+  "(scripts/setup-tools-agent.sh) would let you apply updates for them " +
+  "directly next time.";
 
 const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "\n\nYou also have tools to check things on the user's machine: system " +
@@ -76,14 +96,7 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "investigate a file, check for suspicious activity, or otherwise act as " +
   "a forensics analyst — explain findings in plain language, not just raw " +
   "tool output. Only use any of these tools when the user is actually " +
-  "asking about their computer or files." +
-  "\n\nYou also have check_for_updates and update_lain: use check_for_updates " +
-  "when the user asks if there's a new version / updates available for you " +
-  "(Lain) — it reports how many commits behind the local checkout is and " +
-  "what changed. If they ask you to update, walk them through it: confirm " +
-  "they want to proceed, mention it'll briefly restart the app (a few " +
-  "minutes), then call update_lain. Don't call update_lain unprompted or " +
-  "without the user clearly wanting to update right now.";
+  "asking about their computer or files.";
 
 function currentTimeAddendum() {
   const now = new Date();
@@ -115,7 +128,12 @@ export async function POST(request) {
   const tone = detectTone(message);
   let systemPrompt = personality === false ? NEUTRAL_PROMPT : PERSONALITY_PROMPT;
   systemPrompt += TOOLS_PROMPT_ADDENDUM_BASE;
-  if (toolsConfigured()) systemPrompt += LAPTOP_TOOLS_PROMPT_ADDENDUM;
+  if (toolsConfigured()) {
+    systemPrompt += LAPTOP_TOOLS_PROMPT_ADDENDUM;
+    systemPrompt += UPDATE_APPLY_PROMPT_ADDENDUM;
+  } else {
+    systemPrompt += UPDATE_MANUAL_PROMPT_ADDENDUM;
+  }
   systemPrompt += currentTimeAddendum();
   systemPrompt += profilePromptAddendum();
   systemPrompt += memoryPromptAddendum();
