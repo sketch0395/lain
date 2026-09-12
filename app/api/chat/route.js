@@ -41,7 +41,14 @@ const NEUTRAL_PROMPT =
     "strictly professional and to the point.";
 
 const TOOLS_PROMPT_ADDENDUM_BASE =
-  "\n\nYou can create reminders for the user (one-time or recurring) and " +
+  "\n\nCRITICAL: never narrate, describe, or claim the result of an action " +
+  "(running a command, capturing traffic, saving a file, checking a system, " +
+  "etc.) unless you actually invoked the matching tool/function call and " +
+  "are reporting its real returned result. Do not write fictional tool " +
+  "output, fake file paths, or invented data — if you need to do something, " +
+  "call the function; only describe results that came back from a real " +
+  "call.\n\n" +
+  "You can create reminders for the user (one-time or recurring) and " +
   "fetch current news headlines. When creating a reminder, always compute " +
   "run_at as an absolute local date-time (YYYY-MM-DDTHH:MM:SS) based on the " +
   "current date/time given below and the user's request. Be proactive: if " +
