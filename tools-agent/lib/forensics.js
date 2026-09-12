@@ -447,7 +447,22 @@ async function capturePackets({
 // making the caller wait for it, then sends a desktop notification (via the
 // same notify-send path reminders use) summarizing the result — success or
 // failure — so the user finds out without having to keep the chat open.
+//
+// notify() itself is wrapped in its own try/catch here: if notify-send
+// fails for some reason (missing binary, no display/session, etc.) that
+// must not look like the *capture* failed, and must not silently vanish as
+// an unhandled rejection — always log so there's a trail even if the
+// desktop popup itself doesn't show.
+function safeNotify(title, body) {
+  try {
+    notify(title, body);
+  } catch (err) {
+    console.error(`[lain-tools] notify("${title}") failed:`, err.message);
+  }
+}
+
 function capturePacketsInBackground(opts) {
+  console.log(`[lain-tools] background capture started (duration=${opts.durationSeconds}s)`);
   capturePackets(opts)
     .then((result) => {
       const topTalker = result.topTalkers?.[0];
@@ -458,12 +473,15 @@ function capturePacketsInBackground(opts) {
       ]
         .filter(Boolean)
         .join(" ");
-      notify("📡 Packet capture complete", body);
+      console.log(`[lain-tools] background capture finished: ${body}`);
+      safeNotify("📡 Packet capture complete", body);
     })
     .catch((err) => {
-      notify("📡 Packet capture failed", err.message);
+      console.error(`[lain-tools] background capture failed: ${err.message}`);
+      safeNotify("📡 Packet capture failed", err.message);
     });
 }
+
 
 function registerRoutes(router) {
   router.any("/hash", (req, res, url) => {
