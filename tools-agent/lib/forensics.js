@@ -1,6 +1,7 @@
 "use strict";
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 const crypto = require("node:crypto");
 const { execFileSync } = require("node:child_process");
@@ -21,6 +22,16 @@ const IMAGE_EXTENSIONS_FOR_EXIF = new Set([
   ".jpg", ".jpeg", ".png", ".tif", ".tiff", ".heic", ".heif", ".webp", ".gif", ".bmp", ".raw",
 ]);
 const PCAP_EXTENSIONS = new Set([".pcap", ".pcapng", ".cap"]);
+// Every live capture is saved by default (not just summarized in-memory)
+// so the user never loses a capture just because they forgot to ask for
+// it to be saved — this is where it lands unless a save_path is given.
+const DEFAULT_CAPTURE_DIR = path.join(os.homedir(), "Documents", "pcaps");
+
+// Filesystem-safe timestamp for default capture filenames, e.g.
+// "2026-09-12T13-40-05".
+function timestampForFilename() {
+  return new Date().toISOString().replace(/:/g, "-").replace(/\.\d+Z$/, "");
+}
 
 function commandAvailable(bin) {
   try {
@@ -306,9 +317,16 @@ function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimi
   );
   const filterArgs = filterExpr ? String(filterExpr).trim().split(/\s+/).filter(Boolean) : [];
 
+  // Captures are saved by default so nothing is lost just because the user
+  // (or the model) forgot to ask for a save_path — pass save: false to opt
+  // out and only get the in-memory summary.
   let resolvedSavePath = null;
-  if (savePath) {
-    resolvedSavePath = resolveInputPath(savePath);
+  if (savePath !== false) {
+    const requestedPath =
+      typeof savePath === "string" && savePath.trim()
+        ? savePath
+        : path.join(DEFAULT_CAPTURE_DIR, `capture-${timestampForFilename()}.pcap`);
+    resolvedSavePath = resolveInputPath(requestedPath);
     if (!isAllowed(resolvedSavePath)) throw new Error("save path not allowed");
     if (!PCAP_EXTENSIONS.has(path.extname(resolvedSavePath).toLowerCase())) {
       resolvedSavePath += ".pcap";
@@ -342,15 +360,27 @@ function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimi
     // capabilities) come through stderr instead.
     if (err.stdout !== undefined) out = err.stdout.toString();
     const stderr = (err.stderr || "").toString();
-    if (!out && /permission|not permitted|cap_net_raw/i.test(stderr)) {
+    if (/permission|not permitted|cap_net_raw/i.test(stderr)) {
       throw new Error(
         "tcpdump couldn't open the interface (permission denied). Grant it packet-capture " +
           "rights, e.g. `sudo setcap cap_net_raw,cap_net_admin+eip $(command -v tcpdump)`, " +
           "then try again."
       );
     }
-    if (!out && stderr) throw new Error(`tcpdump failed: ${stderr.trim()}`);
-    if (!out && !resolvedSavePath) throw new Error(`tcpdump failed: ${err.message}`);
+    // With -w, tcpdump never prints decoded packets to stdout — its normal
+    // "N packets captured" summary always goes to stderr, even on a
+    // perfectly successful, `timeout`-terminated capture. So stderr text
+    // alone isn't a failure signal when we're saving to a file; only treat
+    // it as fatal if the file wasn't actually written.
+    if (resolvedSavePath) {
+      if (!fs.existsSync(resolvedSavePath)) {
+        throw new Error(`tcpdump failed: ${stderr.trim() || err.message}`);
+      }
+    } else if (!out && stderr) {
+      throw new Error(`tcpdump failed: ${stderr.trim()}`);
+    } else if (!out) {
+      throw new Error(`tcpdump failed: ${err.message}`);
+    }
   }
 
   if (resolvedSavePath) {
