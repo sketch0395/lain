@@ -5,6 +5,7 @@ import RemindersPanel from "./RemindersPanel";
 import AboutMePanel from "./AboutMePanel";
 import MemoriesPanel from "./MemoriesPanel";
 import WipeMemoryModal from "./WipeMemoryModal";
+import GrantCapturePermissionModal from "./GrantCapturePermissionModal";
 
 export default function ChatClient({ userLabel, userImage, signOutAction }) {
   const [conversations, setConversations] = useState([]);
@@ -25,6 +26,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
   const [aboutMeOpen, setAboutMeOpen] = useState(false);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
   const [wipeMemoryOpen, setWipeMemoryOpen] = useState(false);
+  const [grantCaptureOpen, setGrantCaptureOpen] = useState(false);
   const [tone, setTone] = useState(null);
   const [deepThinking, setDeepThinking] = useState(false);
   const scrollRef = useRef(null);
@@ -608,6 +610,21 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 <span className="opacity-60">›</span>
               </button>
 
+              {toolsStatus !== "off" && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSettingsOpen(false);
+                    setGrantCaptureOpen(true);
+                  }}
+                  title="Grant tcpdump permission to capture live network traffic (requires your sudo password, sent directly to the tools agent — never through chat)"
+                  className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+                >
+                  <span>🛡️ Enable packet capture</span>
+                  <span className="opacity-60">›</span>
+                </button>
+              )}
+
               <button
                 type="button"
                 onClick={togglePersonality}
@@ -714,6 +731,10 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             refreshConversations();
           }}
         />
+      )}
+
+      {grantCaptureOpen && (
+        <GrantCapturePermissionModal onClose={() => setGrantCaptureOpen(false)} />
       )}
 
       <main className="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">

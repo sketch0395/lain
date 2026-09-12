@@ -7,32 +7,38 @@
 // read/change the Omarchy desktop (current theme, active window/workspace),
 // do basic digital-forensics-style investigation (file hashing/metadata,
 // string extraction, process/connection snapshots, log search, login
-// history, and pcap summaries), and apply Lain updates (git pull +
-// rebuild/restart) — the only tool here that touches anything outside the
-// sandboxed Docker container. Checking *whether* an update is available
-// happens separately, straight from the Lain app via the public GitHub
-// API (see lib/version.js in the main app), so that part works without
-// this agent too.
+// history, live/offline packet capture, and pcap summaries), and apply
+// Lain updates (git pull + rebuild/restart) — the only tool here that
+// touches anything outside the sandboxed Docker container. Checking
+// *whether* an update is available happens separately, straight from the
+// Lain app via the public GitHub API (see lib/version.js in the main
+// app), so that part works without this agent too.
 //
 // See ../TOOLS.md for the full endpoint-by-endpoint reference and which
 // LLM-facing tool (defined in lib/tools.js) calls each one.
 //
 // This file is just the HTTP entrypoint — each group of tools lives in its
 // own module under lib/ (config, path/sandboxing helpers, and one file per
-// tool domain: diagnostics, omarchy, files, forensics, notify, update),
-// and registers its own routes via the tiny router in lib/http.js.
+// tool domain: diagnostics, omarchy, files, forensics, notify, update,
+// capabilities), and registers its own routes via the tiny router in
+// lib/http.js.
 //
 // Security model:
 //   - Every request (except /health) requires a bearer token, compared
 //     with a constant-time check (lib/http.js's checkAuth).
-//   - Mostly read-only. The two exceptions that change anything on the
-//     laptop are `notify-send` (reminder notifications) and
-//     `omarchy-theme-set` (theme switching, only after validating the
-//     requested name against the actual installed theme list) — neither
-//     can write/delete/read arbitrary files, and both run via execFile
-//     with fixed binaries and argument arrays (no shell involved). Every
-//     forensics command is likewise a fixed binary with a fixed or
-//     validated argument array — no shell, no string interpolation.
+//   - Mostly read-only. The exceptions that change anything on the
+//     laptop are `notify-send` (reminder notifications), `omarchy-theme-set`
+//     (theme switching, only after validating the requested name against
+//     the actual installed theme list), and a single, fixed `setcap`
+//     invocation used solely to grant tcpdump packet-capture permissions
+//     (lib/capabilities.js — not an LLM tool; only reachable from a
+//     dedicated, non-chat password prompt in the main app, so a user's
+//     sudo password never enters the model's context or conversation
+//     history) — none of these can write/delete/read arbitrary files, and
+//     all run via execFile with fixed binaries and argument arrays (no
+//     shell involved). Every forensics command is likewise a fixed binary
+//     with a fixed or validated argument array — no shell, no string
+//     interpolation.
 //   - Filesystem access is restricted to LAIN_TOOLS_ALLOWED_ROOTS
 //     (resolved to real, absolute paths) and further blocked from a
 //     denylist of sensitive paths (SSH/GPG keys, .env files, etc.) even if
@@ -59,6 +65,7 @@ require("./lib/files").registerRoutes(router);
 require("./lib/forensics").registerRoutes(router);
 require("./lib/notify").registerRoutes(router);
 require("./lib/update").registerRoutes(router);
+require("./lib/capabilities").registerRoutes(router);
 
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, `http://${req.headers.host}`);

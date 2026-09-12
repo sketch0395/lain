@@ -313,6 +313,13 @@ function capturePackets({ interfaceName, filterExpr, durationSeconds, packetLimi
     if (!PCAP_EXTENSIONS.has(path.extname(resolvedSavePath).toLowerCase())) {
       resolvedSavePath += ".pcap";
     }
+    // Create any missing parent folders (e.g. "~/Documents/pcaps/") so the
+    // user/model can name a brand-new location without a separate mkdir
+    // step first. Still bounded by isAllowed() above — every ancestor of an
+    // allowed path is itself inside the same allowed root.
+    const destDir = path.dirname(resolvedSavePath);
+    if (!isAllowed(destDir)) throw new Error("save path not allowed");
+    fs.mkdirSync(destDir, { recursive: true });
   }
 
   const baseArgs = ["-nn", "-i", iface, "-c", String(limit)];

@@ -60,7 +60,17 @@ an LLM tool, called directly by `lib/notify.js`).
 `capture_packets` needs the tools agent's `tcpdump` binary to have
 `cap_net_raw`/`cap_net_admin` capabilities (or run as root) — otherwise it
 returns a clear permission error. `scripts/setup-tools-agent.sh` offers to
-grant this automatically via `setcap`.
+grant this automatically via `setcap`. If you hit the permission error later
+(e.g. after an update replaced the `tcpdump` binary), you can also grant it
+from the app itself: Settings → "🛡️ Enable packet capture" opens a password
+prompt that runs the same `setcap` command via a dedicated, non-chat
+endpoint (`POST /grant-capture-permission` in
+`tools-agent/lib/capabilities.js`). The password is sent directly from the
+browser to the tools agent over a proxied API route
+(`app/api/tools/grant-capture-permission/route.js`) and is never passed
+through the chat/LLM tool-call flow, logged, or persisted — this is
+deliberate, since anything routed through `lib/tools.js` would end up in
+conversation history.
 
 ## Built-in tools (always available)
 
