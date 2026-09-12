@@ -1,49 +1,33 @@
 # Lain
 
-A personal, self-hosted chatbot. The web app runs on your home lab server;
-the actual LLM (Ollama) runs on your laptop's GPU, and Lain "reaches back"
-to it over your LAN. Conversations are persisted in SQLite so Lain
-remembers your chat history across sessions. Access is locked down with
-OAuth sign-in plus an allowlist, since this is publicly reachable.
+A personal, self-hosted chatbot. It runs entirely on your local machine —
+the web app (Next.js + SQLite) and the LLM (Ollama) both run locally, so
+there's no remote server, no public exposure, and no HTTPS/reverse-proxy
+setup required.
 
 ```
-[ Browser ] --> [ Home lab server: 10.5.1.17, Next.js + SQLite ]
-                          |
-                          v  LAN, http://10.5.1.20:11434
-                 [ Laptop: 10.5.1.20, Ollama + GPU ]
+[ Browser / lain CLI ] --> [ localhost:3000, Next.js + SQLite ]
+                                        |
+                                        v  http://localhost:11434 (or LAN IP)
+                                [ Ollama, local GPU ]
 ```
 
-## 1. One-time setup on your laptop (the LLM host)
+## 1. One-time setup: Ollama
 
-Ollama needs to listen on your LAN interface, not just localhost, and you
-need the model pulled:
+Just make sure Ollama is running locally and has the model pulled:
 
 ```bash
-# Pull the model Lain will use
 ollama pull gemma4:e4b
-
-# Make Ollama listen on all interfaces (persists via systemd override)
-sudo systemctl edit ollama
-```
-Add:
-```ini
-[Service]
-Environment="OLLAMA_HOST=0.0.0.0"
-```
-Then:
-```bash
-sudo systemctl restart ollama
+# optional larger "deep thinking" model
+ollama pull gemma4:12b
 ```
 
-Allow the server to reach port 11434 through your laptop's firewall, e.g.
-with `ufw`:
-```bash
-sudo ufw allow from 10.5.1.17 to any port 11434
-```
+Verify it's reachable: `curl http://localhost:11434/api/tags`. Since Lain
+runs in Docker on the same machine, `OLLAMA_HOST` in `.env` should point
+at your host's LAN IP (e.g. `http://10.5.1.20:11434`) rather than
+`localhost`, since containers don't share the host's loopback interface.
 
-Verify from the server side once deployed: `curl http://10.5.1.20:11434/api/tags`.
-
-## 2. Authentication setup (required before exposing publicly)
+## 2. Authentication setup
 
 Lain is gated behind GitHub and Google OAuth sign-in, plus an allowlist —
 only accounts you explicitly approve can get in, even though anyone could
@@ -52,12 +36,12 @@ technically authenticate with GitHub/Google.
 ### Create OAuth apps
 
 **GitHub** (https://github.com/settings/developers → "New OAuth App"):
-- Homepage URL: `https://lain.dialtone.cc`
-- Authorization callback URL: `https://lain.dialtone.cc/api/auth/callback/github`
+- Homepage URL: `http://localhost:3000`
+- Authorization callback URL: `http://localhost:3000/api/auth/callback/github`
 - Copy the Client ID and generate a Client Secret.
 
-**Google** (https://console.cloud.google.com/apis/credentials → "Create OAuth client ID", type "Web application"):
-- Authorized redirect URI: `https://lain.dialtone.cc/api/auth/callback/google`
+**Google** (https://console.cloud.google.com/apis/credentials → "Create OAuth client ID", type "Web application", optional):
+- Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
 - Copy the Client ID and Client Secret.
 
 ### How access control works
@@ -72,28 +56,21 @@ technically authenticate with GitHub/Google.
 - Sessions are JWT-based cookies, valid for 30 days.
 - A "Sign out" button lives at the bottom of the sidebar.
 
-### Important: HTTPS is required
-
-OAuth providers and secure session cookies require HTTPS in production.
-Since you already have a reverse proxy (Caddy/Nginx/Traefik) terminating
-TLS at `https://lain.dialtone.cc` in front of the container's port 3000,
-no extra config is needed here — just make sure `AUTH_URL` matches that
-public HTTPS URL exactly.
+Since Lain is local-only (`http://localhost`), there's no HTTPS/reverse
+proxy requirement — `AUTH_URL` just needs to match `http://localhost:3000`
+(or whatever port you run on).
 
 ## 3. Configuration
 
-`.env*` files are **never synced by `deploy.sh`** — the server's `.env` is
-the source of truth for production secrets and must be created/edited
-directly on the server (over SSH), so a stale or empty local file can
+Lain runs entirely on this machine, so there's a single `.env` used for
+both the Docker deployment and local dev — it's gitignored (see
+in one place (not synced anywhere), so a stale or empty file can
 never accidentally wipe out or overwrite it on redeploy.
 
-The first time you deploy to a fresh server, `deploy.sh` will notice
-there's no `.env` yet and create one from `.env.example`, then tell you to
-edit it. SSH in and fill in the real values:
+The first time you run `./deploy.sh`, it will notice there's no `.env`
+yet, create one from `.env.example`, and tell you to edit it:
 
 ```bash
-ssh dialtone@10.5.1.17
-cd ~/lain
 nano .env   # or vim, etc.
 ```
 
@@ -104,11 +81,11 @@ OLLAMA_MODEL=gemma4:e4b
 OLLAMA_MODEL_DEEP=gemma4:12b
 
 # Host port Lain listens on (change if the default is already taken)
-LAIN_HOST_PORT=7869
+LAIN_HOST_PORT=3000
 
 # Generate with: npx auth secret
 AUTH_SECRET=
-AUTH_URL=https://lain.dialtone.cc
+AUTH_URL=http://localhost:3000
 
 AUTH_GITHUB_ID=
 AUTH_GITHUB_SECRET=
@@ -117,48 +94,42 @@ AUTH_GOOGLE_ID=
 AUTH_GOOGLE_SECRET=
 
 # Comma-separated allowlist: GitHub usernames and/or Google emails
-ALLOWED_USERS=xbikr2@gmail.com,sketch0395
+ALLOWED_USERS=sketch0395
+
+# Bearer token for the `lain` CLI (generate with: openssl rand -hex 32)
+LAIN_API_TOKEN=
 ```
 
-Then re-run `./deploy.sh` (or just `docker compose up -d --build` on the
-server) to pick up the new values. `ALLOWED_USERS` can be extended any
-time (add more of your 6 users) — just edit `.env` on the server and
-restart the container, no code changes needed.
+Then re-run `./deploy.sh` to pick up the new values.
 
-For local development, use `.env.local` on your laptop instead (see
-"Local development" below) — it's also excluded from sync.
+## 4. Deploy locally
 
-## 4. Deploy to the home lab server
-
-Requires `rsync`, `ssh`, and Docker + the compose plugin on the server
-(`10.5.1.17`, user `dialtone`).
+Requires Docker + the compose plugin, and your user in the `docker` group
+(`sudo usermod -aG docker $USER`, then log out/in) so it can run without
+`sudo`.
 
 ```bash
 ./deploy.sh
 ```
 
-This syncs the project (excluding `.env*`, `node_modules`, `.next`, `data`)
-to `~/lain` on the server and runs `docker compose up -d --build`. Lain
-will be available at `http://10.5.1.17:<LAIN_HOST_PORT>` (defaults to
-`3000`; set `LAIN_HOST_PORT` in the server's `.env` if that port is
-already taken by something else) — proxied publicly via
-`https://lain.dialtone.cc`.
+This runs `docker compose up -d --build` right here on your machine. Lain
+will be available at `http://localhost:<LAIN_HOST_PORT>` (defaults to
+`3000`).
 
 To redeploy after making changes, just re-run `./deploy.sh`.
 
-## 5. Local development
+## 5. Local development (without Docker)
 
 ```bash
 npm install
 npm run dev
 ```
 
-Create a `.env.local` (gitignored, never synced to the server) with
-`OLLAMA_HOST`/`OLLAMA_MODEL` pointing at your laptop's Ollama instance,
-plus `AUTH_*` values for a **separate, localhost-only OAuth app** (e.g. a
-GitHub OAuth App with callback URL `http://localhost:3000/api/auth/callback/github`)
-since auth is enforced on every route. Don't reuse the production OAuth
-app's credentials for local testing.
+Uses the same `.env` (Next.js also picks up `.env.local` if present, for
+overrides you don't want in the Docker `.env` — e.g. a separate dev-only
+OAuth app). Since everything is local-only, it's fine to reuse the same
+OAuth app for both `npm run dev` and the Docker deployment as long as
+`AUTH_URL`/callback URLs match `http://localhost:3000`.
 
 ## How memory works
 
@@ -176,14 +147,14 @@ Allow/Deny tool confirmation) without you needing to retype anything.
 
 ## Personality
 
-This is a stripped-down base template — the original character/companion
-personality has been removed, leaving a blank, generic assistant prompt
-(see `PERSONALITY_PROMPT`/`NEUTRAL_PROMPT` in `app/api/chat/route.js`).
-Personality can still be toggled on/off per-browser from Settings (click
-your name in the sidebar) → "✨ Personality: on/off"; the preference is
-stored in `localStorage` and sent with each chat request. Define Lain's
-actual voice/character by editing those prompts directly, or override via
-env vars without touching code:
+Lain has a confident, assertive, and outgoing online persona — talkative,
+bold, sassy, and aware of everything going on in the conversation (see
+`PERSONALITY_PROMPT` in `app/api/chat/route.js`). Personality can be
+toggled on/off per-browser from Settings (click your name in the
+sidebar) → "✨ Personality: on/off"; the preference is stored in
+`localStorage` and sent with each chat request, falling back to a plain
+`NEUTRAL_PROMPT` when off. Tweak her voice by editing those prompts
+directly, or override via env vars without touching code:
 
 - `LAIN_SYSTEM_PROMPT` – used when personality mode is on (default: see
   `app/api/chat/route.js`)
@@ -191,23 +162,22 @@ env vars without touching code:
 
 ## CLI access (Omarchy / terminal)
 
-A bearer token lets trusted local tools talk to Lain's API without going
-through OAuth. This is used by the `lain` terminal command.
+A bearer token lets the `lain` terminal command talk to Lain's API
+without going through OAuth. Since everything runs on one machine, this
+is a single one-time setup.
 
-### 1. Server: set a token
+### 1. Set a token
 
-Add to the server's `~/lain/.env` (generate with `openssl rand -hex 32`):
+Add to the local `.env` (generate with `openssl rand -hex 32`):
 
 ```
 LAIN_API_TOKEN=<random-hex-string>
 ```
 
-Restart the container (`docker compose up -d` on the server) to pick it up.
+Restart the container (`docker compose up -d`) to pick it up.
 Leave this blank/unset to disable CLI access entirely.
 
-### 2. Client machine: install the CLI
-
-The easiest way (any machine, Omarchy or not):
+### 2. Install the CLI
 
 ```
 ./scripts/setup-omarchy-cli.sh
@@ -215,15 +185,16 @@ The easiest way (any machine, Omarchy or not):
 
 This installs `bin/lain` to `~/.local/bin/lain`, prompts for your
 `LAIN_URL`/`LAIN_API_TOKEN` and writes `~/.config/lain/config`
-(`chmod 600`), and — if running on Omarchy — adds a Hyprland keybinding,
-floating window rule, and launcher entry (see section 3). It's idempotent:
-safe to re-run on the same machine, and existing config is left alone
-unless you pass `--force`.
+(`chmod 600`), and — if running on Omarchy — adds a Hyprland keybinding
+(default `SUPER + A`; set `LAIN_KEYBIND` to override, e.g. `SUPER + L` if
+`SUPER + A` is already taken by something else), floating window rule,
+and launcher entry (see section 3). It's idempotent: safe to re-run, and
+existing config is left alone unless you pass `--force`.
 
-To set up non-interactively (e.g. scripted/other machines):
+To set up non-interactively:
 
 ```
-LAIN_URL=https://lain.dialtone.cc LAIN_API_TOKEN=<token> \
+LAIN_URL=http://localhost:3000 LAIN_API_TOKEN=<token> LAIN_KEYBIND="SUPER + L" \
   ./scripts/setup-omarchy-cli.sh --non-interactive
 ```
 
@@ -231,8 +202,8 @@ Or install manually: copy `bin/lain` anywhere on your `PATH` and
 `chmod +x` it, then create `~/.config/lain/config` (`chmod 600`) with:
 
 ```
-LAIN_URL=https://lain.dialtone.cc
-LAIN_API_TOKEN=<same token as the server>
+LAIN_URL=http://localhost:3000
+LAIN_API_TOKEN=<same token as in .env>
 ```
 
 Usage:
@@ -250,7 +221,7 @@ lain --rename <id|name|url> "new name"   # rename a chat
 CLI conversations share the same SQLite database as the web UI — a
 conversation started from the terminal shows up in the sidebar there too,
 titled from your first message. Every CLI reply also prints a
-"Continue in browser" link (`https://lain.dialtone.cc/?c=<id>`) that opens
+"Continue in browser" link (`http://localhost:3000/?c=<id>`) that opens
 that exact conversation directly in the web UI, so you can pick up right
 where you left off.
 
@@ -323,7 +294,7 @@ This installs the agent to `~/.local/share/lain/tools-agent.js`, prompts
 for (or accepts as env vars) a port, allowed root directories, and
 generates/reuses an auth token, then registers and starts it as a
 `systemd --user` service (`lain-tools-agent.service`). It prints the
-`LAIN_TOOLS_URL`/`LAIN_TOOLS_TOKEN` to copy into the server's `.env`, plus
+`LAIN_TOOLS_URL`/`LAIN_TOOLS_TOKEN` to copy into the local `.env`, plus
 the exact `ufw allow` command to run so the home server can reach it.
 
 Check it's running any time with:
@@ -334,14 +305,14 @@ systemctl --user status lain-tools-agent
 
 ### 2. Server: point Lain at it
 
-Add to the server's `~/lain/.env`:
+Add to the local `.env`:
 
 ```
 LAIN_TOOLS_URL=http://<laptop-lan-ip>:8787
 LAIN_TOOLS_TOKEN=<token printed by the setup script>
 ```
 
-Redeploy (`./deploy.sh` or `docker compose up -d --build` on the server).
+Redeploy (`./deploy.sh` or `docker compose up -d --build`).
 Leave these blank/unset to disable tool access entirely — Lain will just
 chat normally with no tool prompts.
 
@@ -385,7 +356,7 @@ reminder is due, Lain delivers it over whichever channels are configured:
   node -e "console.log(require('web-push').generateVAPIDKeys())"
   ```
 
-  Add the printed keys to the server's `~/lain/.env`:
+  Add the printed keys to the local `.env`:
 
   ```
   VAPID_PUBLIC_KEY=<public key>
@@ -396,7 +367,7 @@ reminder is due, Lain delivers it over whichever channels are configured:
   Redeploy, then open Settings (click your name in the sidebar) → toggle
   "Notifications" on and allow the browser permission prompt.
 - **Email**, via SMTP (works even when your laptop/phone are off). Add SMTP
-  credentials to the server's `~/lain/.env` — for Gmail, generate an
+  credentials to the local `.env` — for Gmail, generate an
   [App Password](https://myaccount.google.com/apppasswords) (requires
   2-Step Verification) rather than using your normal password:
 
@@ -419,7 +390,7 @@ Reminders also post a 🔔 message into the conversation they were created
 from, so you'll see them in your chat history even if you miss the
 notification. Recurring reminders (`daily`, `weekly`, `weekdays`) keep
 firing until cancelled; one-time reminders fire once and clean themselves
-up. Set `LAIN_TIMEZONE` (default `America/Chicago`) in the server's `.env`
+up. Set `LAIN_TIMEZONE` (default `America/Chicago`) in the local `.env`
 if you're in a different timezone — this controls how relative times like
 "in 30 minutes" or "at 9am" are interpreted.
 
@@ -508,7 +479,7 @@ respect `LAIN_TIMEZONE` the same way simple schedules do.
 Each reminder can also specify its own email recipient(s) — enter a
 comma-separated list in the "Email to" field (in the panel, or via
 `email_to` when asking Lain to create a reminder in chat). Leave it blank
-to fall back to the server's `LAIN_REMINDER_EMAIL_TO` default.
+to fall back to `LAIN_REMINDER_EMAIL_TO` in `.env`.
 
 ## Customization
 
@@ -543,4 +514,4 @@ to fall back to the server's `LAIN_REMINDER_EMAIL_TO` default.
   used by the Reminders management panel
 - `lib/db.js`, `lib/conversations.js` – SQLite persistence layer
 - `Dockerfile`, `docker-compose.yml` – production deployment
-- `deploy.sh` – rsync + remote `docker compose up -d --build`
+- `deploy.sh` – local `docker compose up -d --build`
