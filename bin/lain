@@ -1,0 +1,397 @@
+#!/usr/bin/env bash
+# Lain CLI — talk to your self-hosted Lain chatbot from the terminal.
+#
+# Config file: ~/.config/lain/config (chmod 600), containing:
+#   LAIN_URL=https://lain.dialtone.cc
+#   LAIN_API_TOKEN=<token matching the server's LAIN_API_TOKEN>
+#
+# Usage:
+#   lain "message"          Send one message, print the reply, exit.
+#   lain                    Open an interactive chat REPL.
+#   lain --new "message"    Start a fresh conversation (new memory thread).
+#   lain --plain "message"  Ask without her personality (neutral mode).
+#   lain --list             List recent conversations (id + title).
+#   lain --pick             Interactively pick a recent conversation to
+#                            continue (fzf if installed, numbered menu
+#                            otherwise), then drop into the REPL. This is
+#                            what the SUPER+A Omarchy shortcut runs.
+#   lain --continue <id|name|url> [message]
+#                            Resume a conversation by id, exact/partial chat
+#                            name, or a web UI https://.../?c=<id> URL.
+#   lain --rename <id|name|url> "new name"
+#                            Rename a chat (also doable in the web UI by
+#                            double-clicking a chat in the sidebar).
+#
+# Every reply includes a "Continue in browser" link (also available via
+# '/link' in the REPL) that deep-links straight into that same conversation
+# in the web UI.
+#
+# If the tools agent is configured (see scripts/setup-tools-agent.sh),
+# Lain may ask to check diagnostics or files on your laptop — you'll be
+# prompted [y/N] before anything runs, same as the web UI's Allow/Deny.
+#
+# Conversation state (which thread to continue) is shared with the web UI:
+# every message — from the CLI or the browser — lands in the same SQLite
+# database, so a conversation started here shows up in the sidebar there.
+
+set -euo pipefail
+
+CONFIG_FILE="${LAIN_CLI_CONFIG:-$HOME/.config/lain/config}"
+STATE_DIR="$HOME/.config/lain"
+STATE_FILE="$STATE_DIR/conversation_id"
+
+if [[ -f "$CONFIG_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$CONFIG_FILE"
+fi
+
+LAIN_URL="${LAIN_URL:-}"
+LAIN_API_TOKEN="${LAIN_API_TOKEN:-}"
+
+if [[ -z "$LAIN_URL" || -z "$LAIN_API_TOKEN" ]]; then
+  echo "lain: missing LAIN_URL/LAIN_API_TOKEN." >&2
+  echo "Create $CONFIG_FILE with:" >&2
+  echo "  LAIN_URL=https://lain.dialtone.cc" >&2
+  echo "  LAIN_API_TOKEN=<token>" >&2
+  exit 1
+fi
+
+# Colors matching Lain's crimson/gold theme (falls back gracefully if the
+# terminal doesn't support truecolor).
+CRIMSON=$'\e[38;2;224;41;75m'
+GOLD=$'\e[38;2;216;173;78m'
+MUTED=$'\e[38;2;181;160;143m'
+RESET=$'\e[0m'
+
+personality="true"
+new_conversation="false"
+continue_arg=""
+rename_arg=""
+new_title=""
+list_mode="false"
+pick_mode="false"
+message=""
+want_continue_value="false"
+want_rename_target="false"
+want_rename_title="false"
+
+for arg in "$@"; do
+  if [[ "$want_continue_value" == "true" ]]; then
+    continue_arg="$arg"
+    want_continue_value="false"
+    continue
+  fi
+  if [[ "$want_rename_target" == "true" ]]; then
+    rename_arg="$arg"
+    want_rename_target="false"
+    want_rename_title="true"
+    continue
+  fi
+  if [[ "$want_rename_title" == "true" ]]; then
+    new_title="$arg"
+    want_rename_title="false"
+    continue
+  fi
+  case "$arg" in
+    --plain) personality="false" ;;
+    --new) new_conversation="true" ;;
+    --list) list_mode="true" ;;
+    --pick) pick_mode="true" ;;
+    --continue) want_continue_value="true" ;;
+    --rename) want_rename_target="true" ;;
+    -h|--help)
+      sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'
+      exit 0
+      ;;
+    *)
+      if [[ -z "$message" ]]; then
+        message="$arg"
+      else
+        message="$message $arg"
+      fi
+      ;;
+  esac
+done
+
+mkdir -p "$STATE_DIR"
+
+if [[ "$list_mode" == "true" ]]; then
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    "$LAIN_URL/api/conversations")
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  if [[ "$http_code" != "200" ]]; then
+    echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $body" >&2
+    exit 1
+  fi
+  echo "$body" | jq -r '.[] | "\(.id)  \(.created_at)  \(.title // "(untitled)")"'
+  exit 0
+fi
+
+if [[ "$pick_mode" == "true" ]]; then
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    "$LAIN_URL/api/conversations")
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  if [[ "$http_code" != "200" ]]; then
+    echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $body" >&2
+    exit 1
+  fi
+
+  # Build "id<TAB>label" lines, most-recently-active conversation first
+  # (the server already orders by last activity).
+  menu_lines=("__new__"$'\t'"➕ New conversation")
+  while IFS=$'\t' read -r id title ts; do
+    [[ -z "$id" ]] && continue
+    ts_int="${ts%%.*}"
+    when="$(date -d "@$ts_int" "+%b %d, %H:%M" 2>/dev/null || echo "")"
+    menu_lines+=("$id"$'\t'"${title:-(untitled)}  ${MUTED}· $when${RESET}")
+  done < <(jq -r '.[] | "\(.id)\t\(.title // "")\t\(.last_active // .created_at)"' <<<"$body")
+
+  if command -v fzf >/dev/null; then
+    selected="$(printf '%s\n' "${menu_lines[@]}" | fzf --ansi --delimiter=$'\t' --with-nth=2 \
+      --prompt="Continue which chat? " --height=~60% --reverse \
+      --header="Enter: open   Esc: cancel")"
+  else
+    echo "Recent conversations:" >&2
+    i=0
+    for line in "${menu_lines[@]}"; do
+      echo "  [$i] ${line#*$'\t'}" >&2
+      i=$((i + 1))
+    done
+    read -rp "Pick a number (default 0): " idx
+    idx="${idx:-0}"
+    selected="${menu_lines[$idx]:-${menu_lines[0]}}"
+  fi
+
+  if [[ -z "$selected" ]]; then
+    echo "${MUTED}↳ Cancelled.${RESET}" >&2
+    exit 0
+  fi
+
+  picked_id="${selected%%$'\t'*}"
+  if [[ "$picked_id" == "__new__" ]]; then
+    rm -f "$STATE_FILE"
+    echo "${MUTED}↳ Starting a new conversation${RESET}" >&2
+  else
+    echo -n "$picked_id" > "$STATE_FILE"
+    echo "${MUTED}↳ Resuming conversation ${picked_id}${RESET}" >&2
+  fi
+fi
+
+resolve_conversation() {
+  local arg="$1"
+  # Full URL containing ?c=<id> or &c=<id>.
+  if [[ "$arg" == *"?c="* || "$arg" == *"&c="* ]]; then
+    arg="${arg#*c=}"
+    arg="${arg%%&*}"
+  fi
+  # Already looks like a conversation UUID — use it as-is, no lookup needed.
+  if [[ "$arg" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ ]]; then
+    echo "$arg"
+    return 0
+  fi
+
+  # Otherwise treat it as a chat name/title to look up.
+  local response http_code body
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    "$LAIN_URL/api/conversations")
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  if [[ "$http_code" != "200" ]]; then
+    echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $body" >&2
+    return 1
+  fi
+
+  local matches
+  matches=$(jq -r --arg q "$arg" \
+    '[.[] | select((.title // "") | ascii_downcase | contains($q | ascii_downcase))]' \
+    <<<"$body")
+  local count
+  count=$(jq 'length' <<<"$matches")
+
+  if [[ "$count" == "0" ]]; then
+    echo "${CRIMSON}⚠ No conversation found matching \"$arg\".${RESET} Try 'lain --list'." >&2
+    return 1
+  fi
+
+  # Prefer an exact (case-insensitive) title match over a substring match.
+  local exact
+  exact=$(jq -r --arg q "$arg" \
+    '[.[] | select((.title // "" | ascii_downcase) == ($q | ascii_downcase))] | .[0].id // empty' \
+    <<<"$matches")
+  if [[ -n "$exact" ]]; then
+    echo "$exact"
+    return 0
+  fi
+
+  if [[ "$count" != "1" ]]; then
+    echo "${CRIMSON}⚠ \"$arg\" matches $count conversations — be more specific:${RESET}" >&2
+    jq -r '.[] | "  \(.id)  \(.title)"' <<<"$matches" >&2
+    return 1
+  fi
+
+  jq -r '.[0].id' <<<"$matches"
+}
+
+if [[ -n "$rename_arg" ]]; then
+  target_id="$(resolve_conversation "$rename_arg")" || exit 1
+  if [[ -z "$new_title" ]]; then
+    echo "lain: --rename requires a new name, e.g. lain --rename \"old name\" \"new name\"" >&2
+    exit 1
+  fi
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    -X PATCH "$LAIN_URL/api/conversations/$target_id" \
+    -d "$(jq -n --arg title "$new_title" '{title: $title}')")
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  if [[ "$http_code" != "200" ]]; then
+    echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $body" >&2
+    exit 1
+  fi
+  echo "${MUTED}↳ Renamed to \"${new_title}\"${RESET}"
+  exit 0
+fi
+
+if [[ -n "$continue_arg" ]]; then
+  resolved_id="$(resolve_conversation "$continue_arg")" || exit 1
+  echo -n "$resolved_id" > "$STATE_FILE"
+  echo "${MUTED}↳ Resuming conversation ${resolved_id}${RESET}" >&2
+fi
+
+if [[ "$new_conversation" == "true" ]]; then
+  rm -f "$STATE_FILE"
+fi
+
+conversation_id=""
+if [[ -f "$STATE_FILE" ]]; then
+  conversation_id="$(cat "$STATE_FILE")"
+fi
+
+send_message() {
+  local text="$1"
+  local payload
+  payload=$(jq -n \
+    --arg message "$text" \
+    --arg conversationId "$conversation_id" \
+    --argjson personality "$personality" \
+    '{message: $message, personality: $personality} + (if $conversationId == "" then {} else {conversationId: $conversationId} end)')
+
+  local response
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    -X POST "$LAIN_URL/api/chat" \
+    -d "$payload")
+
+  local http_code body
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+
+  if [[ "$http_code" != "200" ]]; then
+    echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $(jq -r '.error // .' <<<"$body" 2>/dev/null || echo "$body")" >&2
+    return 1
+  fi
+
+  conversation_id="$(jq -r '.conversationId' <<<"$body")"
+  echo "$conversation_id" > "$STATE_FILE"
+
+  if [[ "$(jq -r '.needsConfirmation // false' <<<"$body")" == "true" ]]; then
+    handle_tool_confirmation "$body"
+    return
+  fi
+
+  jq -r '.reply' <<<"$body"
+}
+
+# Lain wants to use a tool (e.g. check diagnostics, find/read a file on this
+# laptop). Prompt for approval on the actual terminal (not stdout, since
+# send_message's stdout is captured by the caller), then either run it via
+# /api/chat/confirm or tell her no.
+handle_tool_confirmation() {
+  local body="$1"
+  local pending_id
+  pending_id="$(jq -r '.pendingId' <<<"$body")"
+
+  {
+    echo "${GOLD}🔧 Lain wants to:${RESET}"
+    jq -r '.toolCalls[] | "  • \(.description)"' <<<"$body"
+    printf '%sAllow? [y/N]:%s ' "$GOLD" "$RESET"
+  } > /dev/tty
+
+  local answer approve
+  IFS= read -r answer < /dev/tty || answer=""
+  case "$answer" in
+    y|Y|yes|Yes) approve="true" ;;
+    *) approve="false" ;;
+  esac
+
+  local response http_code confirm_body
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    -H "Content-Type: application/json" \
+    -X POST "$LAIN_URL/api/chat/confirm" \
+    -d "$(jq -n --arg pendingId "$pending_id" --argjson approve "$approve" '{pendingId: $pendingId, approve: $approve}')")
+  http_code="${response##*$'\n'}"
+  confirm_body="${response%$'\n'*}"
+
+  if [[ "$http_code" != "200" ]]; then
+    echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $(jq -r '.error // .' <<<"$confirm_body" 2>/dev/null || echo "$confirm_body")" >&2
+    return 1
+  fi
+
+  conversation_id="$(jq -r '.conversationId' <<<"$confirm_body")"
+  echo "$conversation_id" > "$STATE_FILE"
+  jq -r '.reply' <<<"$confirm_body"
+}
+
+conversation_link() {
+  echo "${MUTED}↳ Continue in browser: ${LAIN_URL}/?c=${conversation_id}${RESET}"
+}
+
+if [[ -n "$message" ]]; then
+  reply="$(send_message "$message")"
+  [[ -f "$STATE_FILE" ]] && conversation_id="$(cat "$STATE_FILE")"
+  echo "${GOLD}Lain:${RESET} $reply"
+  conversation_link
+  exit 0
+fi
+
+# No message given — interactive REPL.
+echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL)${RESET}"
+[[ -n "$conversation_id" ]] && conversation_link
+while true; do
+  printf '%s' "${GOLD}you>${RESET} "
+  if ! IFS= read -r line; then
+    echo
+    break
+  fi
+  [[ -z "$line" ]] && continue
+  case "$line" in
+    exit|quit) break ;;
+    /new)
+      rm -f "$STATE_FILE"
+      conversation_id=""
+      echo "${MUTED}Started a new conversation.${RESET}"
+      continue
+      ;;
+    /link)
+      if [[ -n "$conversation_id" ]]; then
+        conversation_link
+      else
+        echo "${MUTED}No conversation started yet — send a message first.${RESET}"
+      fi
+      continue
+      ;;
+  esac
+  reply="$(send_message "$line" || true)"
+  [[ -f "$STATE_FILE" ]] && conversation_id="$(cat "$STATE_FILE")"
+  [[ -n "$reply" ]] && echo "${GOLD}Lain:${RESET} $reply"
+done
+
+

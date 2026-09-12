@@ -1,0 +1,41 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+
+  /* Lain palette — inspired by her Knights of the Blood Oath uniform:
+     crimson red, warm cream/white, and gold trim, over a deep chestnut-black. */
+  --lain-bg: #150d0c;
+  --lain-bg-alt: #1e1310;
+  --lain-panel: #241713;
+  --lain-panel-alt: #2c1c17;
+  --lain-border: #4a2c22;
+  --lain-crimson: #b3122e;
+  --lain-crimson-light: #e0294b;
+  --lain-crimson-dark: #7a0d20;
+  --lain-gold: #d8ad4e;
+  --lain-gold-soft: #e8c876;
+  --lain-cream: #f5ece0;
+  --lain-muted: #b5a08f;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
