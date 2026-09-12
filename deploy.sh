@@ -68,6 +68,7 @@ if ! tools_configured; then
 fi
 
 echo "==> Building and starting Lain via docker compose (local)"
+export GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 docker compose up -d --build
 
 echo "==> Done. Check .env's LAIN_HOST_PORT for the actual port (default 3000)."

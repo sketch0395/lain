@@ -30,6 +30,12 @@ COPY --from=builder /app/.next/static ./.next/static
 RUN mkdir -p /data && chown -R lain:lain /data /app
 USER lain
 
+# Baked in at build time (see deploy.sh/scripts/update.sh) so Lain can
+# compare her running commit against github.com/sketch0395/lain without
+# needing the local tools agent (see lib/version.js).
+ARG GIT_COMMIT=unknown
+ENV LAIN_GIT_COMMIT=$GIT_COMMIT
+
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 ENV LAIN_DB_PATH=/data/lain.db
