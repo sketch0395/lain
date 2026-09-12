@@ -114,8 +114,11 @@ echo
 echo "Then redeploy: ./deploy.sh (or: docker compose up -d --build)"
 echo
 echo "If you have a firewall (ufw/firewalld) active, make sure it allows"
-echo "local/Docker-bridge traffic to port $LAIN_TOOLS_PORT — it's not"
-echo "exposed to the internet, but the Lain container needs to reach it."
+echo "Docker traffic to port $LAIN_TOOLS_PORT — it's not exposed to the"
+echo "internet, but the Lain container needs to reach it. Docker compose"
+echo "projects get their own subnet (not always 172.17.0.0/16), so allow"
+echo "the whole private Docker range to be safe, e.g.:"
+echo "  sudo ufw allow from 172.16.0.0/12 to any port $LAIN_TOOLS_PORT proto tcp"
 echo
 echo "Useful commands:"
 echo "  systemctl --user status lain-tools-agent"

@@ -59,9 +59,14 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "unless it fits naturally. Do NOT use it for trivial or one-off details.";
 
 const LAPTOP_TOOLS_PROMPT_ADDENDUM =
-  "\n\nYou also have tools to check things on the user's laptop (system " +
-  "diagnostics, finding files, searching file contents, reading a file). " +
-  "Only use them when the user is actually asking about their computer or " +
+  "\n\nYou also have tools to check things on the user's machine: system " +
+  "diagnostics, finding files by name, searching file contents, reading a " +
+  "specific file, listing what's in a directory, and reading/summarizing " +
+  "every file directly inside a directory at once (e.g. 'summarize the " +
+  "files in my Downloads folder' -> use summarize_directory with root set " +
+  "to that folder, then write an actual summary in your own words from " +
+  "what comes back — don't just paste the raw file contents). Only use " +
+  "these tools when the user is actually asking about their computer or " +
   "files.";
 
 function currentTimeAddendum() {

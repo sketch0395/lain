@@ -338,12 +338,30 @@ The sidebar shows a 🧰 indicator when the tools agent is configured and
 reachable, so you can confirm connectivity at a glance (also reported by
 `/api/health` as `toolsEnabled`/`toolsReachable`).
 
+**Firewall gotcha:** the Lain container runs on its own Docker
+compose-managed network (e.g. `172.18.0.0/16`), not the default Docker
+bridge (`172.17.0.0/16`) — these are different subnets. If you use `ufw`
+and it's blocking the tools agent port, allow the whole private Docker
+range rather than a specific `/16`:
+
+```
+sudo ufw allow from 172.16.0.0/12 to any port 8788 proto tcp
+```
+
+You can confirm what's actually being blocked with
+`sudo journalctl -k | grep "UFW BLOCK"` — look at the `SRC=` address in the
+log line to see which subnet the container is really using.
+
 ### Available tools
 
 - **System diagnostics** – uptime, CPU/memory/disk usage.
 - **Find files** – search for files by name under an allowed directory.
 - **Search files** – search file contents for a text match.
 - **Read file** – read (and summarize) the contents of a specific file.
+- **List directory** – list a directory's contents (e.g. "what's in my
+  Downloads folder?").
+- **Summarize directory** – read and summarize the top-level text files in
+  a directory (skips binaries and oversized files).
 - **Omarchy status** – current theme, active window, active workspace, and
   connected monitors (via `hyprctl`).
 - **List Omarchy themes** – installed theme names (`omarchy-theme-list`).

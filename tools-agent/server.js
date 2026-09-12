@@ -72,6 +72,33 @@ const MAX_FILE_SCAN_BYTES = 1_500_000; // skip large/binary-ish files in search
 const DEFAULT_WALK_TIMEOUT_MS = 4000;
 const DEFAULT_WALK_MAX_ENTRIES = 20000;
 
+// Extensions we know are binary/non-text — skip these outright when
+// batch-reading a directory for summarization (no point trying to decode
+// a PDF/image/archive as UTF-8 text).
+const BINARY_EXTENSIONS = new Set([
+  ".pdf", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".ico", ".svg",
+  ".zip", ".tar", ".gz", ".xz", ".7z", ".rar",
+  ".mp3", ".mp4", ".mov", ".avi", ".mkv", ".wav", ".flac",
+  ".exe", ".bin", ".iso", ".dmg", ".appimage",
+  ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+  ".woff", ".woff2", ".ttf", ".otf",
+]);
+
+function looksBinary(buf) {
+  // Heuristic: a NUL byte in the first chunk almost always means binary.
+  const sample = buf.subarray(0, Math.min(buf.length, 8000));
+  return sample.includes(0);
+}
+
+function expandHome(p) {
+  if (!p) return p;
+  if (p === "~") return os.homedir();
+  if (p.startsWith("~/") || p.startsWith("~\\")) {
+    return path.join(os.homedir(), p.slice(2));
+  }
+  return p;
+}
+
 function isAllowed(targetPath) {
   let real;
   try {
@@ -281,6 +308,99 @@ function searchFiles(query, root, limit) {
   return results;
 }
 
+// Non-recursive listing of a directory's immediate contents — used so Lain
+// can see what's actually in e.g. ~/Downloads before deciding what to read.
+function listDirectory(root, limit) {
+  const entries = fs.readdirSync(root, { withFileTypes: true });
+  const items = [];
+  for (const entry of entries) {
+    if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
+    const full = path.join(root, entry.name);
+    let stat;
+    try {
+      stat = fs.statSync(full);
+    } catch {
+      continue;
+    }
+    items.push({
+      name: entry.name,
+      type: entry.isDirectory() ? "dir" : "file",
+      size: entry.isDirectory() ? null : stat.size,
+      modified: stat.mtime.toISOString(),
+    });
+  }
+  // Most-recently-modified first — usually what you want for "what's in Downloads".
+  items.sort((a, b) => new Date(b.modified) - new Date(a.modified));
+  return items.slice(0, limit);
+}
+
+// Batch-reads the (text) files directly inside a directory, for
+// summarization. Non-recursive, skips known-binary extensions and anything
+// that looks binary on inspection, and stops once either the file count or
+// total byte budget is hit so a big folder can't blow out the model's context.
+function readDirectory(root, { limit, maxBytesPerFile, maxTotalBytes }) {
+  const entries = fs
+    .readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isFile());
+
+  const withStats = entries
+    .map((e) => {
+      const full = path.join(root, e.name);
+      let stat;
+      try {
+        stat = fs.statSync(full);
+      } catch {
+        return null;
+      }
+      return { name: e.name, path: full, size: stat.size, modified: stat.mtime };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.modified - a.modified);
+
+  const results = [];
+  let totalBytes = 0;
+
+  for (const item of withStats) {
+    if (results.length >= limit) break;
+
+    const ext = path.extname(item.name).toLowerCase();
+    if (BINARY_EXTENSIONS.has(ext)) {
+      results.push({ name: item.name, size: item.size, skipped: "binary file type" });
+      continue;
+    }
+    if (item.size > MAX_FILE_SCAN_BYTES) {
+      results.push({ name: item.name, size: item.size, skipped: "file too large" });
+      continue;
+    }
+    if (totalBytes >= maxTotalBytes) {
+      results.push({ name: item.name, size: item.size, skipped: "byte budget reached" });
+      continue;
+    }
+
+    let buf;
+    try {
+      buf = fs.readFileSync(item.path);
+    } catch {
+      results.push({ name: item.name, size: item.size, skipped: "unreadable" });
+      continue;
+    }
+    if (looksBinary(buf)) {
+      results.push({ name: item.name, size: item.size, skipped: "binary content" });
+      continue;
+    }
+
+    const remainingBudget = maxTotalBytes - totalBytes;
+    const cap = Math.min(maxBytesPerFile, remainingBudget);
+    const truncated = buf.length > cap;
+    const content = buf.subarray(0, cap).toString("utf8");
+    totalBytes += content.length;
+
+    results.push({ name: item.name, size: item.size, content, truncated });
+  }
+
+  return results;
+}
+
 function readFileSafe(targetPath, maxBytes) {
   const buf = fs.readFileSync(targetPath);
   const truncated = buf.length > maxBytes;
@@ -340,7 +460,7 @@ const server = http.createServer((req, res) => {
       const rootArg = url.searchParams.get("root");
       const limit = Math.min(Number(url.searchParams.get("limit")) || 30, 100);
       if (!query) return send(res, 400, { error: "q is required" });
-      const root = rootArg ? path.resolve(rootArg) : ALLOWED_ROOTS[0];
+      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
       if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
       return send(res, 200, { results: findFiles(query, root, limit) });
     }
@@ -350,9 +470,40 @@ const server = http.createServer((req, res) => {
       const rootArg = url.searchParams.get("root");
       const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 50);
       if (!query) return send(res, 400, { error: "q is required" });
-      const root = rootArg ? path.resolve(rootArg) : ALLOWED_ROOTS[0];
+      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
       if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
       return send(res, 200, { results: searchFiles(query, root, limit) });
+    }
+
+    if (url.pathname === "/list") {
+      const rootArg = url.searchParams.get("root");
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
+      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
+      if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+      const stat = fs.statSync(root);
+      if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
+      return send(res, 200, { root, entries: listDirectory(root, limit) });
+    }
+
+    if (url.pathname === "/read-dir") {
+      const rootArg = url.searchParams.get("root");
+      const limit = Math.min(Number(url.searchParams.get("limit")) || 10, 25);
+      const maxBytesPerFile = Math.min(
+        Number(url.searchParams.get("maxBytesPerFile")) || 6000,
+        30000
+      );
+      const maxTotalBytes = Math.min(
+        Number(url.searchParams.get("maxTotalBytes")) || 30000,
+        100000
+      );
+      const root = rootArg ? path.resolve(expandHome(rootArg)) : ALLOWED_ROOTS[0];
+      if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+      const stat = fs.statSync(root);
+      if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
+      return send(res, 200, {
+        root,
+        files: readDirectory(root, { limit, maxBytesPerFile, maxTotalBytes }),
+      });
     }
 
     if (url.pathname === "/notify" && req.method === "POST") {
@@ -376,7 +527,7 @@ const server = http.createServer((req, res) => {
       const p = url.searchParams.get("path") || "";
       const maxBytes = Math.min(Number(url.searchParams.get("max")) || 20000, 100000);
       if (!p) return send(res, 400, { error: "path is required" });
-      const resolved = path.resolve(p);
+      const resolved = path.resolve(expandHome(p));
       if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
       const stat = fs.statSync(resolved);
       if (!stat.isFile()) return send(res, 400, { error: "not a file" });
