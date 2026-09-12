@@ -14,6 +14,28 @@ setup required.
 
 ## Quick start (new Omarchy machine)
 
+```bash
+git clone <this repo> && cd lain
+./install.sh
+```
+
+That one script installs/configures everything it can automate — Docker,
+Ollama (including pulling the models and exposing it to the container),
+`.env` (with a generated `AUTH_SECRET`), the optional `lain` CLI +
+Hyprland keybinding, the optional tools agent, and finally builds and
+starts Lain via `./deploy.sh`. It's safe to re-run any time; every step
+checks whether it's already done first.
+
+The one thing it *can't* do for you: creating a GitHub or Google OAuth
+app (see [section 2](#2-authentication-setup)). The first run will create
+`.env` and stop there with instructions — fill in the OAuth
+credentials, then run `./install.sh` again to finish.
+
+Non-interactive mode (skip all prompts): `./install.sh --non-interactive`.
+
+<details>
+<summary>Manual step-by-step (if you'd rather not run one big script)</summary>
+
 1. **Prerequisites** — Omarchy ships with Docker; if missing:
    `sudo pacman -S docker docker-compose-plugin`, then
    `sudo systemctl enable --now docker` and
@@ -29,6 +51,8 @@ setup required.
    `LAIN_KEYBIND` if that's already taken), and
    `./scripts/setup-tools-agent.sh` if you want Lain to access
    diagnostics/files/Omarchy theme switching.
+
+</details>
 
 ## 1. One-time setup: Ollama
 
