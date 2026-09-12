@@ -396,8 +396,11 @@ log line to see which subnet the container is really using.
 
 Two optional system packages unlock extra detail: `tcpdump` (required for
 `analyze_pcap`) and `perl-image-exiftool`/`exiftool` (for EXIF in
-`file_metadata`) — install via your package manager, e.g. on Arch:
-`sudo pacman -S --needed tcpdump perl-image-exiftool`.
+`file_metadata`). `scripts/setup-tools-agent.sh` detects if either is
+missing and offers to install them via `pacman` automatically — nothing to
+do manually on a fresh Omarchy install. On a non-Arch system, or if you
+skip the prompt, install them yourself: `sudo pacman -S --needed tcpdump
+perl-image-exiftool` (or your distro's equivalent).
 
 ## Reminders & notifications
 
