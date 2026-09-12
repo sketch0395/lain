@@ -161,17 +161,17 @@ export default function RemindersPanel({ onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-[var(--lain-panel)] border border-[var(--lain-gold)]/40 rounded-2xl p-5 space-y-4"
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-[var(--lain-panel)] border border-[var(--lain-highlight)]/40 rounded-2xl p-5 space-y-4"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+          <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
             ⏰ Reminders
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close reminders"
-            className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+            className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
           >
             ✕
           </button>
@@ -189,7 +189,7 @@ export default function RemindersPanel({ onClose }) {
             value={form.title}
             onChange={(e) => setForm({ ...form, title: e.target.value })}
             placeholder="Title (e.g. Timesheet)"
-            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
           <textarea
             required={form.action !== "digest"}
@@ -201,14 +201,14 @@ export default function RemindersPanel({ onClose }) {
                 : "Message to show when it fires"
             }
             rows={2}
-            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
 
           <div className="flex gap-2">
             <select
               value={form.action}
               onChange={(e) => setForm({ ...form, action: e.target.value })}
-              className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-2 py-2 text-sm text-[var(--lain-cream)]"
+              className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-2 py-2 text-sm text-[var(--lain-text)]"
             >
               <option value="notify">Notify</option>
               <option value="news">Notify + news</option>
@@ -217,7 +217,7 @@ export default function RemindersPanel({ onClose }) {
             <select
               value={form.repeat}
               onChange={(e) => setForm({ ...form, repeat: e.target.value })}
-              className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-2 py-2 text-sm text-[var(--lain-cream)]"
+              className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-2 py-2 text-sm text-[var(--lain-text)]"
             >
               {REPEAT_OPTIONS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -234,7 +234,7 @@ export default function RemindersPanel({ onClose }) {
                 value={form.cron_expr}
                 onChange={(e) => setForm({ ...form, cron_expr: e.target.value })}
                 placeholder="Cron expression, e.g. 0 9 * * 1-5"
-                className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm font-mono text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+                className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm font-mono text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
               />
               <select
                 onChange={(e) => e.target.value && setForm({ ...form, cron_expr: e.target.value })}
@@ -258,7 +258,7 @@ export default function RemindersPanel({ onClose }) {
               type="datetime-local"
               value={form.run_at}
               onChange={(e) => setForm({ ...form, run_at: e.target.value })}
-              className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+              className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
             />
           )}
 
@@ -267,16 +267,16 @@ export default function RemindersPanel({ onClose }) {
             value={form.email_to}
             onChange={(e) => setForm({ ...form, email_to: e.target.value })}
             placeholder="Email to (optional, comma-separated — uses server default if blank)"
-            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
 
-          {error && <p className="text-xs text-[var(--lain-crimson-light)]">{error}</p>}
+          {error && <p className="text-xs text-[var(--lain-accent-light)]">{error}</p>}
 
           <div className="flex gap-2 pt-1">
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] py-2 text-sm font-semibold border border-[var(--lain-gold)]/40 disabled:opacity-50"
+              className="flex-1 rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
             >
               {editingId ? "Save changes" : "Create reminder"}
             </button>
@@ -284,7 +284,7 @@ export default function RemindersPanel({ onClose }) {
               <button
                 type="button"
                 onClick={resetForm}
-                className="rounded-lg border border-[var(--lain-border)] px-3 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="rounded-lg border border-[var(--lain-border)] px-3 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 Cancel
               </button>
@@ -315,7 +315,7 @@ export default function RemindersPanel({ onClose }) {
                       type="button"
                       onClick={() => toggleEnabled(r)}
                       title={r.enabled ? "Disable" : "Enable"}
-                      className="text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
                     >
                       {r.enabled ? "🔔" : "🔕"}
                     </button>
@@ -323,7 +323,7 @@ export default function RemindersPanel({ onClose }) {
                       type="button"
                       onClick={() => startEdit(r)}
                       title="Edit"
-                      className="text-[var(--lain-muted)] hover:text-[var(--lain-gold)]"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-highlight)]"
                     >
                       ✎
                     </button>
@@ -331,14 +331,14 @@ export default function RemindersPanel({ onClose }) {
                       type="button"
                       onClick={() => removeReminder(r.id)}
                       title="Delete"
-                      className="text-[var(--lain-muted)] hover:text-[var(--lain-crimson-light)]"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)]"
                     >
                       ✕
                     </button>
                   </span>
                 </div>
                 <p className="text-xs text-[var(--lain-muted)]">{r.message}</p>
-                <p className="text-[11px] text-[var(--lain-gold-soft)]">
+                <p className="text-[11px] text-[var(--lain-highlight-soft)]">
                   {describeSchedule(r)}
                   {r.action === "news" ? " · + news" : ""}
                   {r.action === "digest" ? " · 🔮 briefing" : ""}

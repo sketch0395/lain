@@ -66,17 +66,17 @@ export default function MemoriesPanel({ onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-[var(--lain-panel)] border border-[var(--lain-gold)]/40 rounded-2xl p-5 space-y-4"
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-[var(--lain-panel)] border border-[var(--lain-highlight)]/40 rounded-2xl p-5 space-y-4"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+          <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
             🧠 Memories
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close memories"
-            className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+            className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
           >
             ✕
           </button>
@@ -92,18 +92,18 @@ export default function MemoriesPanel({ onClose }) {
             value={newFact}
             onChange={(e) => setNewFact(e.target.value)}
             placeholder="Add a fact manually…"
-            className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+            className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
           <button
             type="submit"
             disabled={saving || !newFact.trim()}
-            className="rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] px-3 py-2 text-sm font-semibold border border-[var(--lain-gold)]/40 disabled:opacity-50"
+            className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
           >
             Add
           </button>
         </form>
 
-        {error && <p className="text-xs text-[var(--lain-crimson-light)]">{error}</p>}
+        {error && <p className="text-xs text-[var(--lain-accent-light)]">{error}</p>}
 
         {loading ? (
           <p className="text-sm text-[var(--lain-muted)]">Loading…</p>
@@ -118,12 +118,12 @@ export default function MemoriesPanel({ onClose }) {
                 key={m.id}
                 className="flex items-start justify-between gap-2 border border-[var(--lain-border)] rounded-lg p-2"
               >
-                <p className="text-sm text-[var(--lain-cream)] flex-1">{m.content}</p>
+                <p className="text-sm text-[var(--lain-text)] flex-1">{m.content}</p>
                 <button
                   type="button"
                   onClick={() => remove(m.id)}
                   aria-label="Forget this"
-                  className="text-[var(--lain-muted)] hover:text-[var(--lain-crimson-light)] px-1"
+                  className="text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] px-1"
                 >
                   ✕
                 </button>

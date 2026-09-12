@@ -4,20 +4,21 @@
   --background: #ffffff;
   --foreground: #171717;
 
-  /* Lain palette — inspired by her Knights of the Blood Oath uniform:
-     crimson red, warm cream/white, and gold trim, over a deep chestnut-black. */
-  --lain-bg: #150d0c;
-  --lain-bg-alt: #1e1310;
-  --lain-panel: #241713;
-  --lain-panel-alt: #2c1c17;
-  --lain-border: #4a2c22;
-  --lain-crimson: #b3122e;
-  --lain-crimson-light: #e0294b;
-  --lain-crimson-dark: #7a0d20;
-  --lain-gold: #d8ad4e;
-  --lain-gold-soft: #e8c876;
-  --lain-cream: #f5ece0;
-  --lain-muted: #b5a08f;
+  /* Lain palette — inspired by the show's "Wired" aesthetic: a near-black,
+     slightly cool void punctuated by a cyan/teal terminal glow, with a
+     muted violet-red as a secondary accent (the Cyberia club neon). */
+  --lain-bg: #08090b;
+  --lain-bg-alt: #0d1012;
+  --lain-panel: #121517;
+  --lain-panel-alt: #191d1f;
+  --lain-border: #2a3033;
+  --lain-accent: #14b8ad;
+  --lain-accent-light: #4fd8cd;
+  --lain-accent-dark: #0b7a72;
+  --lain-highlight: #a63d6b;
+  --lain-highlight-soft: #d97ba3;
+  --lain-text: #e4e8e7;
+  --lain-muted: #7d8b8a;
 }
 
 @theme inline {

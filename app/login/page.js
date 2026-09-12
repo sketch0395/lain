@@ -24,14 +24,14 @@ export default async function LoginPage({ searchParams }) {
   const hasGoogle = configuredProviderIds.includes("google");
 
   return (
-    <div className="flex h-dvh items-center justify-center bg-[var(--lain-bg)] text-[var(--lain-cream)] px-4">
-      <div className="w-full max-w-sm rounded-2xl border border-[var(--lain-border)] bg-[var(--lain-panel)] p-6 sm:p-8 text-center shadow-[0_0_40px_-10px_rgba(179,18,46,0.4)]">
+    <div className="flex h-dvh items-center justify-center bg-[var(--lain-bg)] text-[var(--lain-text)] px-4">
+      <div className="w-full max-w-sm rounded-2xl border border-[var(--lain-border)] bg-[var(--lain-panel)] p-6 sm:p-8 text-center shadow-[0_0_40px_-10px_rgba(20,184,173,0.35)]">
         <div className="mb-6 flex items-center justify-center gap-2">
           {/* Text monogram logo — no external image asset. */}
-          <span className="w-9 h-9 rounded-md bg-[var(--lain-crimson)] border border-[var(--lain-gold)]/40 flex items-center justify-center text-lg font-bold shrink-0">
+          <span className="w-9 h-9 rounded-md bg-[var(--lain-accent)] border border-[var(--lain-highlight)]/40 flex items-center justify-center text-lg font-bold shrink-0">
             L
           </span>
-          <span className="text-3xl font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+          <span className="text-3xl font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
             Lain
           </span>
         </div>
@@ -40,7 +40,7 @@ export default async function LoginPage({ searchParams }) {
         </p>
 
         {!hasGitHub && !hasGoogle && (
-          <p className="mb-4 text-sm text-[var(--lain-gold-soft)]">
+          <p className="mb-4 text-sm text-[var(--lain-highlight-soft)]">
             No sign-in providers are configured yet. Set AUTH_GITHUB_ID/
             AUTH_GITHUB_SECRET and/or AUTH_GOOGLE_ID/AUTH_GOOGLE_SECRET in
             your .env file (see README.md).
@@ -51,7 +51,7 @@ export default async function LoginPage({ searchParams }) {
           <form action={signInWithProvider.bind(null, "github")}>
             <button
               type="submit"
-              className="mb-3 w-full rounded-lg bg-[#1b1210] border border-[var(--lain-gold)]/30 py-2 font-semibold text-[var(--lain-cream)] hover:bg-[#241814] transition-colors"
+              className="mb-3 w-full rounded-lg bg-[#101416] border border-[var(--lain-highlight)]/30 py-2 font-semibold text-[var(--lain-text)] hover:bg-[#171d1f] transition-colors"
             >
               Continue with GitHub
             </button>
@@ -62,7 +62,7 @@ export default async function LoginPage({ searchParams }) {
           <form action={signInWithProvider.bind(null, "google")}>
             <button
               type="submit"
-              className="w-full rounded-lg bg-[var(--lain-cream)] py-2 font-semibold text-[var(--lain-bg)] hover:brightness-95 transition"
+              className="w-full rounded-lg bg-[var(--lain-text)] py-2 font-semibold text-[var(--lain-bg)] hover:brightness-95 transition"
             >
               Continue with Google
             </button>
@@ -70,7 +70,7 @@ export default async function LoginPage({ searchParams }) {
         )}
 
         {error && (
-          <p className="mt-5 text-sm text-[var(--lain-crimson-light)]">
+          <p className="mt-5 text-sm text-[var(--lain-accent-light)]">
             Access denied. Your account isn&apos;t on the allowlist, or
             sign-in failed. Contact the admin if you believe this is wrong.
           </p>

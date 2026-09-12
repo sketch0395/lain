@@ -47,11 +47,11 @@ export default function WipeMemoryModal({ onClose, onWiped }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm bg-[var(--lain-panel)] border border-[var(--lain-gold)]/40 rounded-2xl p-5 space-y-4 text-center"
+        className="w-full max-w-sm bg-[var(--lain-panel)] border border-[var(--lain-highlight)]/40 rounded-2xl p-5 space-y-4 text-center"
       >
         {step === "confirm" && (
           <>
-            <h2 className="text-lg font-bold text-[var(--lain-cream)]">
+            <h2 className="text-lg font-bold text-[var(--lain-text)]">
               Wipe All Memory?
             </h2>
             <p className="text-sm text-[var(--lain-muted)]">
@@ -63,14 +63,14 @@ export default function WipeMemoryModal({ onClose, onWiped }) {
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-lg border border-[var(--lain-border)] py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="flex-1 rounded-lg border border-[var(--lain-border)] py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => setStep("pin")}
-                className="flex-1 rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] py-2 text-sm font-semibold border border-[var(--lain-gold)]/40"
+                className="flex-1 rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40"
               >
                 Continue
               </button>
@@ -80,7 +80,7 @@ export default function WipeMemoryModal({ onClose, onWiped }) {
 
         {step === "pin" && (
           <form onSubmit={submitPin} className="space-y-3">
-            <h2 className="text-lg font-bold text-[var(--lain-cream)]">
+            <h2 className="text-lg font-bold text-[var(--lain-text)]">
               Enter PIN to confirm
             </h2>
             <p className="text-sm text-[var(--lain-muted)]">
@@ -94,24 +94,24 @@ export default function WipeMemoryModal({ onClose, onWiped }) {
               autoFocus
               value={pin}
               onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
-              className="w-full text-center tracking-[0.5em] text-xl bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-[var(--lain-cream)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+              className="w-full text-center tracking-[0.5em] text-xl bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
               placeholder="••••"
             />
             {error && (
-              <p className="text-xs text-[var(--lain-crimson-light)]">{error}</p>
+              <p className="text-xs text-[var(--lain-accent-light)]">{error}</p>
             )}
             <div className="flex gap-2 pt-1">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 rounded-lg border border-[var(--lain-border)] py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="flex-1 rounded-lg border border-[var(--lain-border)] py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={pin.length !== 4 || wiping}
-                className="flex-1 rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] py-2 text-sm font-semibold border border-[var(--lain-gold)]/40 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
               >
                 {wiping ? "Wiping…" : "Confirm"}
               </button>
@@ -121,16 +121,16 @@ export default function WipeMemoryModal({ onClose, onWiped }) {
 
         {step === "allclear" && (
           <>
-            <div className="w-full py-10 rounded-xl border border-[var(--lain-gold)]/40 text-5xl">
+            <div className="w-full py-10 rounded-xl border border-[var(--lain-highlight)]/40 text-5xl">
               ✅
             </div>
-            <h2 className="text-xl font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+            <h2 className="text-xl font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
               All Clear
             </h2>
             <button
               type="button"
               onClick={onClose}
-              className="w-full rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] py-2 text-sm font-semibold border border-[var(--lain-gold)]/40"
+              className="w-full rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40"
             >
               OK
             </button>

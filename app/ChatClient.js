@@ -405,22 +405,22 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
   }
 
   return (
-    <div className="flex h-dvh bg-[var(--lain-bg)] text-[var(--lain-cream)] overflow-hidden">
+    <div className="flex h-dvh bg-[var(--lain-bg)] text-[var(--lain-text)] overflow-hidden">
       {/* Mobile top bar: hamburger + title. Hidden on md+ where the sidebar is always visible. */}
       <div className="md:hidden fixed top-0 inset-x-0 z-30 flex items-center gap-3 px-3 h-14 bg-[var(--lain-panel)] border-b border-[var(--lain-border)]">
         <button
           type="button"
           onClick={() => setSidebarOpen(true)}
           aria-label="Open chat list"
-          className="p-2 -ml-2 text-[var(--lain-cream)] active:opacity-60"
+          className="p-2 -ml-2 text-[var(--lain-text)] active:opacity-60"
         >
           <span className="text-xl leading-none">☰</span>
         </button>
         {/* Text monogram logo — no external image asset. */}
-        <span className="w-6 h-6 rounded-md bg-[var(--lain-crimson)] border border-[var(--lain-gold)]/40 flex items-center justify-center text-xs font-bold shrink-0">
+        <span className="w-6 h-6 rounded-md bg-[var(--lain-accent)] border border-[var(--lain-highlight)]/40 flex items-center justify-center text-xs font-bold shrink-0">
           L
         </span>
-        <span className="font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+        <span className="font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
           Lain
         </span>
       </div>
@@ -441,10 +441,10 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
           {/* Text monogram logo — no external image asset. */}
-          <span className="w-7 h-7 rounded-md bg-[var(--lain-crimson)] border border-[var(--lain-gold)]/40 flex items-center justify-center text-sm font-bold shrink-0">
+          <span className="w-7 h-7 rounded-md bg-[var(--lain-accent)] border border-[var(--lain-highlight)]/40 flex items-center justify-center text-sm font-bold shrink-0">
             L
           </span>
-          <span className="text-xl font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+          <span className="text-xl font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
             Lain
           </span>
         </div>
@@ -459,14 +459,14 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         </div>
         <button
           onClick={startNewChat}
-          className="bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] text-[var(--lain-cream)] rounded-lg py-2.5 font-semibold mb-3 border border-[var(--lain-gold)]/40 transition-colors"
+          className="bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] text-[var(--lain-text)] rounded-lg py-2.5 font-semibold mb-3 border border-[var(--lain-highlight)]/40 transition-colors"
         >
           + New Chat
         </button>
         <button
           type="button"
           onClick={() => setRemindersOpen(true)}
-          className="flex items-center justify-center gap-2 bg-[var(--lain-panel-alt)] hover:bg-[var(--lain-border)] text-[var(--lain-cream)] rounded-lg py-2 text-sm font-medium mb-3 border border-[var(--lain-border)] transition-colors"
+          className="flex items-center justify-center gap-2 bg-[var(--lain-panel-alt)] hover:bg-[var(--lain-border)] text-[var(--lain-text)] rounded-lg py-2 text-sm font-medium mb-3 border border-[var(--lain-border)] transition-colors"
         >
           ⏰ Reminders
         </button>
@@ -476,9 +476,9 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
               key={c.id}
               onClick={() => editingId !== c.id && openConversation(c.id)}
               onDoubleClick={(e) => startRename(e, c)}
-              className={`flex items-center justify-between px-3 py-2.5 md:py-2 rounded-md text-sm cursor-pointer text-[var(--lain-muted)] hover:bg-[var(--lain-crimson)]/20 hover:text-[var(--lain-cream)] ${
+              className={`flex items-center justify-between px-3 py-2.5 md:py-2 rounded-md text-sm cursor-pointer text-[var(--lain-muted)] hover:bg-[var(--lain-accent)]/20 hover:text-[var(--lain-text)] ${
                 c.id === conversationId
-                  ? "bg-[var(--lain-crimson)]/20 text-[var(--lain-cream)] border-l-2 border-[var(--lain-gold)]"
+                  ? "bg-[var(--lain-accent)]/20 text-[var(--lain-text)] border-l-2 border-[var(--lain-highlight)]"
                   : ""
               }`}
             >
@@ -493,7 +493,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                     if (e.key === "Enter") commitRename(c.id);
                     if (e.key === "Escape") setEditingId(null);
                   }}
-                  className="flex-1 bg-transparent border-b border-[var(--lain-gold)] text-[var(--lain-cream)] outline-none min-w-0 text-base md:text-sm"
+                  className="flex-1 bg-transparent border-b border-[var(--lain-highlight)] text-[var(--lain-text)] outline-none min-w-0 text-base md:text-sm"
                 />
               ) : (
                 <span className="truncate">{c.title || "New chat"}</span>
@@ -502,14 +502,14 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 <span
                   onClick={(e) => startRename(e, c)}
                   title="Rename chat"
-                  className="opacity-50 hover:opacity-100 hover:text-[var(--lain-gold)] p-1 -m-1"
+                  className="opacity-50 hover:opacity-100 hover:text-[var(--lain-highlight)] p-1 -m-1"
                 >
                   ✎
                 </span>
                 <span
                   onClick={(e) => removeConversation(e, c.id)}
                   title="Delete chat"
-                  className="opacity-50 hover:opacity-100 hover:text-[var(--lain-crimson-light)] p-1 -m-1"
+                  className="opacity-50 hover:opacity-100 hover:text-[var(--lain-accent-light)] p-1 -m-1"
                 >
                   ✕
                 </span>
@@ -520,14 +520,14 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         <button
           type="button"
           onClick={() => setSettingsOpen(true)}
-          className="flex items-center gap-2 mt-2 pt-3 border-t border-[var(--lain-border)] text-xs text-[var(--lain-muted)] hover:text-[var(--lain-cream)] text-left"
+          className="flex items-center gap-2 mt-2 pt-3 border-t border-[var(--lain-border)] text-xs text-[var(--lain-muted)] hover:text-[var(--lain-text)] text-left"
         >
           {userImage && (
             // eslint-disable-next-line @next/next/no-img-element
             <img
               src={userImage}
               alt=""
-              className="w-7 h-7 rounded-full border border-[var(--lain-gold)]/40 shrink-0"
+              className="w-7 h-7 rounded-full border border-[var(--lain-highlight)]/40 shrink-0"
             />
           )}
           <span className="truncate flex-1">{userLabel}</span>
@@ -542,17 +542,17 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         >
           <div
             onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-sm bg-[var(--lain-panel)] border border-[var(--lain-gold)]/40 rounded-2xl p-5 space-y-4"
+            className="w-full max-w-sm bg-[var(--lain-panel)] border border-[var(--lain-highlight)]/40 rounded-2xl p-5 space-y-4"
           >
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+              <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
                 Settings
               </h2>
               <button
                 type="button"
                 onClick={() => setSettingsOpen(false)}
                 aria-label="Close settings"
-                className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 ✕
               </button>
@@ -564,10 +564,10 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 <img
                   src={userImage}
                   alt=""
-                  className="w-10 h-10 rounded-full border border-[var(--lain-gold)]/40"
+                  className="w-10 h-10 rounded-full border border-[var(--lain-highlight)]/40"
                 />
               )}
-              <span className="text-sm text-[var(--lain-cream)] truncate">{userLabel}</span>
+              <span className="text-sm text-[var(--lain-text)] truncate">{userLabel}</span>
             </div>
 
             <div className="space-y-1 border-t border-[var(--lain-border)] pt-3">
@@ -577,7 +577,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                   setSettingsOpen(false);
                   setAboutMeOpen(true);
                 }}
-                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 <span>👤 About me</span>
                 <span className="opacity-60">›</span>
@@ -589,7 +589,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                   setSettingsOpen(false);
                   setMemoriesOpen(true);
                 }}
-                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 <span>🧠 Memories</span>
                 <span className="opacity-60">›</span>
@@ -602,7 +602,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                   setWipeMemoryOpen(true);
                 }}
                 title="Permanently erase everything Lain has learned and remembered about you"
-                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-crimson-light)] hover:text-red-400"
+                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-accent-light)] hover:text-red-400"
               >
                 <span>🗑️ Wipe All Memory</span>
                 <span className="opacity-60">›</span>
@@ -613,16 +613,16 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 onClick={togglePersonality}
                 aria-pressed={personality}
                 title="Toggle Lain's personality on or off"
-                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
               >
                 <span>{personality ? "✨ Personality: on" : "Personality: off"}</span>
                 <span
                   className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                    personality ? "bg-[var(--lain-crimson)]" : "bg-[var(--lain-border)]"
+                    personality ? "bg-[var(--lain-accent)]" : "bg-[var(--lain-border)]"
                   }`}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-[var(--lain-cream)] transition-transform ${
+                    className={`inline-block h-4 w-4 transform rounded-full bg-[var(--lain-text)] transition-transform ${
                       personality ? "translate-x-4" : "translate-x-0.5"
                     }`}
                   />
@@ -642,7 +642,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                       ? "Server hasn't configured push notifications (VAPID keys) yet"
                       : "Toggle browser push notifications for reminders"
                   }
-                  className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)] disabled:opacity-50"
+                  className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)] disabled:opacity-50"
                 >
                   <span>
                     {notifStatus === "denied"
@@ -655,11 +655,11 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                   </span>
                   <span
                     className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors ${
-                      notifStatus === "on" ? "bg-[var(--lain-crimson)]" : "bg-[var(--lain-border)]"
+                      notifStatus === "on" ? "bg-[var(--lain-accent)]" : "bg-[var(--lain-border)]"
                     }`}
                   >
                     <span
-                      className={`inline-block h-4 w-4 transform rounded-full bg-[var(--lain-cream)] transition-transform ${
+                      className={`inline-block h-4 w-4 transform rounded-full bg-[var(--lain-text)] transition-transform ${
                         notifStatus === "on" ? "translate-x-4" : "translate-x-0.5"
                       }`}
                     />
@@ -690,7 +690,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
               <form action={signOutAction} className="border-t border-[var(--lain-border)] pt-3">
                 <button
                   type="submit"
-                  className="w-full text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)] border border-[var(--lain-border)] rounded-lg py-2"
+                  className="w-full text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)] border border-[var(--lain-border)] rounded-lg py-2"
                 >
                   Sign out
                 </button>
@@ -716,7 +716,14 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         />
       )}
 
-      <main className="flex-1 flex flex-col min-w-0 pt-14 md:pt-0">
+      <main
+        className="flex-1 flex flex-col min-w-0 pt-14 md:pt-0 bg-no-repeat"
+        style={{
+          backgroundImage: "url(/lain-bg.jpeg)",
+          backgroundSize: "260px auto",
+          backgroundPosition: "bottom right",
+        }}
+      >
         <div
           ref={scrollRef}
           className="flex-1 overflow-y-auto p-3 sm:p-6 space-y-3"
@@ -725,13 +732,13 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             m.role === "confirm" ? (
               <div
                 key={i}
-                className="max-w-[85%] sm:max-w-[70%] px-4 py-3 rounded-2xl bg-[var(--lain-panel-alt)]/50 border border-[var(--lain-gold)]/50 space-y-2"
+                className="max-w-[85%] sm:max-w-[70%] px-4 py-3 rounded-2xl bg-[var(--lain-panel-alt)]/50 border border-[var(--lain-highlight)]/50 space-y-2"
               >
                 <p className="text-sm">
                   🔧 Lain wants to:
                   <br />
                   {m.toolCalls.map((tc, j) => (
-                    <span key={j} className="block text-[var(--lain-gold-soft)]">
+                    <span key={j} className="block text-[var(--lain-highlight-soft)]">
                       • {tc.description}
                     </span>
                   ))}
@@ -741,14 +748,14 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                     <button
                       type="button"
                       onClick={() => respondToToolRequest(m.pendingId, true)}
-                      className="flex-1 rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] py-1.5 text-sm font-semibold border border-[var(--lain-gold)]/40"
+                      className="flex-1 rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40"
                     >
                       Allow
                     </button>
                     <button
                       type="button"
                       onClick={() => respondToToolRequest(m.pendingId, false)}
-                      className="flex-1 rounded-lg border border-[var(--lain-border)] py-1.5 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                      className="flex-1 rounded-lg border border-[var(--lain-border)] py-1.5 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
                     >
                       Deny
                     </button>
@@ -764,7 +771,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 key={i}
                 className={`max-w-[85%] sm:max-w-[70%] px-4 py-2 rounded-2xl whitespace-pre-wrap break-words ${
                   m.role === "user"
-                    ? "self-end ml-auto bg-gradient-to-br from-[var(--lain-crimson)]/50 to-[var(--lain-crimson-dark)]/50 text-[var(--lain-cream)] border border-[var(--lain-gold)]/30"
+                    ? "self-end ml-auto bg-gradient-to-br from-[var(--lain-accent)]/50 to-[var(--lain-accent-dark)]/50 text-[var(--lain-text)] border border-[var(--lain-highlight)]/30"
                     : m.error
                     ? "bg-[var(--lain-panel-alt)]/50 border border-red-500/40"
                     : "bg-[var(--lain-panel-alt)]/50 border border-[var(--lain-border)]"
@@ -776,7 +783,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                     type="button"
                     onClick={() => retryMessage(m)}
                     disabled={sending}
-                    className="mt-2 flex items-center gap-1 text-xs font-medium text-[var(--lain-gold-soft)] hover:text-[var(--lain-gold)] disabled:opacity-50"
+                    className="mt-2 flex items-center gap-1 text-xs font-medium text-[var(--lain-highlight-soft)] hover:text-[var(--lain-highlight)] disabled:opacity-50"
                   >
                     <span>🔄</span>
                     <span>Retry</span>
@@ -810,8 +817,8 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             title="Deep Thinking uses a larger, slower model for harder questions (a bit slower to respond, including a brief model-swap delay)"
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
               deepThinking
-                ? "bg-[var(--lain-crimson)] border-[var(--lain-gold)]/40 text-[var(--lain-cream)]"
-                : "bg-[var(--lain-panel-alt)] border-[var(--lain-border)] text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+                ? "bg-[var(--lain-accent)] border-[var(--lain-highlight)]/40 text-[var(--lain-text)]"
+                : "bg-[var(--lain-panel-alt)] border-[var(--lain-border)] text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
             }`}
           >
             <span>🧠</span>
@@ -835,14 +842,14 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             }}
             rows={1}
             placeholder="Message Lain..."
-            className="flex-1 resize-none bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-xl px-3 py-2 text-base sm:text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+            className="flex-1 resize-none bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-xl px-3 py-2 text-base sm:text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
           <button
             type="submit"
             disabled={sending}
             aria-label="Send message"
             title="Send"
-            className="flex items-center justify-center shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-r from-[var(--lain-crimson)] to-[var(--lain-crimson-dark)] border border-[var(--lain-gold)]/40 text-[var(--lain-cream)] disabled:opacity-50 hover:brightness-110 transition"
+            className="flex items-center justify-center shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-full bg-gradient-to-r from-[var(--lain-accent)] to-[var(--lain-accent-dark)] border border-[var(--lain-highlight)]/40 text-[var(--lain-text)] disabled:opacity-50 hover:brightness-110 transition"
           >
             <svg
               viewBox="0 0 24 24"

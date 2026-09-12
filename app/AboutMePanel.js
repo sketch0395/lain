@@ -68,7 +68,7 @@ export default function AboutMePanel({ onClose }) {
         value={form[key]}
         onChange={(e) => setForm({ ...form, [key]: e.target.value })}
         placeholder={placeholder}
-        className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+        className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
         {...extra}
       />
     </label>
@@ -81,17 +81,17 @@ export default function AboutMePanel({ onClose }) {
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-[var(--lain-panel)] border border-[var(--lain-gold)]/40 rounded-2xl p-5 space-y-4"
+        className="w-full max-w-lg max-h-[85vh] overflow-y-auto bg-[var(--lain-panel)] border border-[var(--lain-highlight)]/40 rounded-2xl p-5 space-y-4"
       >
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-crimson-light)] to-[var(--lain-gold-soft)] bg-clip-text text-transparent">
+          <h2 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent">
             👤 About Me
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Close about me"
-            className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-cream)]"
+            className="p-1 text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
           >
             ✕
           </button>
@@ -124,7 +124,7 @@ export default function AboutMePanel({ onClose }) {
                 onChange={(e) => setForm({ ...form, about: e.target.value })}
                 placeholder="Anything else worth knowing — interests, goals, projects…"
                 rows={3}
-                className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-cream)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-gold)]"
+                className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
               />
             </label>
 
@@ -132,17 +132,17 @@ export default function AboutMePanel({ onClose }) {
             {field("linkedin_url", "LinkedIn", "https://linkedin.com/in/…")}
             {field("github_url", "GitHub", "https://github.com/…")}
 
-            {error && <p className="text-xs text-[var(--lain-crimson-light)]">{error}</p>}
+            {error && <p className="text-xs text-[var(--lain-accent-light)]">{error}</p>}
 
             <div className="flex items-center gap-2 pt-1">
               <button
                 type="submit"
                 disabled={saving}
-                className="flex-1 rounded-lg bg-[var(--lain-crimson)] hover:bg-[var(--lain-crimson-light)] py-2 text-sm font-semibold border border-[var(--lain-gold)]/40 disabled:opacity-50"
+                className="flex-1 rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
               >
                 {saving ? "Saving…" : "Save"}
               </button>
-              {saved && <span className="text-xs text-[var(--lain-gold-soft)]">Saved ✓</span>}
+              {saved && <span className="text-xs text-[var(--lain-highlight-soft)]">Saved ✓</span>}
             </div>
           </form>
         )}

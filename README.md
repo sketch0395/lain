@@ -512,9 +512,14 @@ to fall back to the server's `LAIN_REMINDER_EMAIL_TO` default.
 
 ## Customization
 
-- **Background image**: drop any image at `public/lain-bg.webp` (any
-  format works, just keep the `.webp` filename) and rebuild/redeploy — it's
-  rendered behind the chat at low opacity via `app/ChatClient.js`.
+- **Background image**: drop any image at `public/lain-bg.jpeg` (any
+  format works, just update the filename/extension referenced in
+  `app/ChatClient.js`) and rebuild/redeploy — it's rendered behind the
+  chat, bottom-right, via `app/ChatClient.js`.
+- **Color theme**: all colors live as CSS custom properties in
+  `app/globals.css` (`--lain-bg`, `--lain-panel`, `--lain-accent`,
+  `--lain-highlight`, `--lain-text`, `--lain-muted`, etc.) — change the hex
+  values there and rebuild/redeploy to retheme the whole app.
 - **Chat bubble opacity**: bubble backgrounds are set to 50% opacity
   (`/50` Tailwind modifier) in `app/ChatClient.js` so the background image
   shows through; adjust the `/50` suffixes there to taste.
