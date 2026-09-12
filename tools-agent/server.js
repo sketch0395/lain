@@ -14,6 +14,9 @@
 // API (see lib/version.js in the main app), so that part works without
 // this agent too.
 //
+// See ../TOOLS.md for the full endpoint-by-endpoint reference and which
+// LLM-facing tool (defined in lib/tools.js) calls each one.
+//
 // This file is just the HTTP entrypoint — each group of tools lives in its
 // own module under lib/ (config, path/sandboxing helpers, and one file per
 // tool domain: diagnostics, omarchy, files, forensics, notify, update),

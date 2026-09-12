@@ -294,6 +294,9 @@ full message history and memory carry over.
 
 ## Tools access (diagnostics, files & Omarchy)
 
+> Full technical reference for every tool (params, endpoints,
+> implementation): [TOOLS.md](TOOLS.md).
+
 Lain can optionally reach a small agent running on this same machine so
 she can check system diagnostics, look up/read files, or check/change
 your Omarchy theme when you ask her to — e.g. "can you check your
