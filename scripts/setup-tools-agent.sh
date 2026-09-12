@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Installs and starts lain-tools-agent as a systemd --user service on this
-# laptop. Idempotent — safe to re-run any time (e.g. after updating
+# machine. Idempotent — safe to re-run any time (e.g. after updating
 # tools-agent/server.js).
 #
 # What it does:
@@ -8,7 +8,7 @@
 #   2. Generates an LAIN_TOOLS_TOKEN (if one doesn't already exist) and
 #      writes config to ~/.config/lain/tools-agent.env
 #   3. Installs + enables a systemd --user unit that runs it on login/boot
-#   4. Prints the UFW rule needed to let the home lab server reach it
+#   4. Prints the LAIN_TOOLS_URL/LAIN_TOOLS_TOKEN to add to Lain's .env
 #
 # Note: the Omarchy status/theme tools (omarchy_status, list_omarchy_themes,
 # set_omarchy_theme) need `hyprctl`, `omarchy-theme-list`, and
@@ -20,7 +20,6 @@
 #   LAIN_TOOLS_PORT           default 8787
 #   LAIN_TOOLS_ALLOWED_ROOTS  comma-separated dirs Lain may read (default: $HOME)
 #   LAIN_TOOLS_TOKEN          reuse an existing token instead of generating one
-#   SERVER_LAN_IP              your home lab server's LAN IP, for the UFW hint (default 10.5.1.17)
 
 set -euo pipefail
 
@@ -30,7 +29,6 @@ CONFIG_DIR="$HOME/.config/lain"
 ENV_FILE="$CONFIG_DIR/tools-agent.env"
 UNIT_DIR="$HOME/.config/systemd/user"
 UNIT_FILE="$UNIT_DIR/lain-tools-agent.service"
-SERVER_LAN_IP="${SERVER_LAN_IP:-10.5.1.17}"
 
 echo "==> Installing lain-tools-agent"
 
@@ -107,14 +105,17 @@ echo
 echo "==> Done."
 echo
 LAN_IP="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -v '^172\.\(1[7-9]\|2[0-9]\|3[0-1]\)\.' | head -1)"
-LAN_IP="${LAN_IP:-<this-laptop-ip>}"
-echo "Add these to the server's .env (10.5.1.17:~/lain/.env), matching the"
-echo "token above, then redeploy:"
+LAN_IP="${LAN_IP:-<this-machine-ip>}"
+echo "Add these to Lain's .env (same machine, since Lain runs in Docker and"
+echo "needs this machine's LAN IP rather than localhost to reach the agent):"
 echo "  LAIN_TOOLS_URL=http://$LAN_IP:$LAIN_TOOLS_PORT"
 echo "  LAIN_TOOLS_TOKEN=$LAIN_TOOLS_TOKEN"
 echo
-echo "Also allow the home lab server to reach this port through your firewall:"
-echo "  sudo ufw allow from $SERVER_LAN_IP to any port $LAIN_TOOLS_PORT proto tcp"
+echo "Then redeploy: ./deploy.sh (or: docker compose up -d --build)"
+echo
+echo "If you have a firewall (ufw/firewalld) active, make sure it allows"
+echo "local/Docker-bridge traffic to port $LAIN_TOOLS_PORT — it's not"
+echo "exposed to the internet, but the Lain container needs to reach it."
 echo
 echo "Useful commands:"
 echo "  systemctl --user status lain-tools-agent"

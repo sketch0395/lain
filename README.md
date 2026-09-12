@@ -12,6 +12,24 @@ setup required.
                                 [ Ollama, local GPU ]
 ```
 
+## Quick start (new Omarchy machine)
+
+1. **Prerequisites** — Omarchy ships with Docker; if missing:
+   `sudo pacman -S docker docker-compose-plugin`, then
+   `sudo systemctl enable --now docker` and
+   `sudo usermod -aG docker $USER` (log out/in to pick up the group).
+   You'll also want `ollama` installed (`sudo pacman -S ollama` or see
+   [ollama.com](https://ollama.com)) and `node`/`npm` if you plan to run
+   `npm run dev` instead of Docker.
+2. `git clone <this repo> && cd lain`
+3. Follow **1–4** below: pull the Ollama model, create a GitHub/Google
+   OAuth app, fill in `.env`, then `./deploy.sh`.
+4. Optional: run `./scripts/setup-omarchy-cli.sh` for the `lain` terminal
+   command + Hyprland shortcut (default `SUPER + A`, override with
+   `LAIN_KEYBIND` if that's already taken), and
+   `./scripts/setup-tools-agent.sh` if you want Lain to access
+   diagnostics/files/Omarchy theme switching.
+
 ## 1. One-time setup: Ollama
 
 Just make sure Ollama is running locally and has the model pulled:
@@ -252,11 +270,12 @@ full message history and memory carry over.
 
 ## Tools access (diagnostics, files & Omarchy)
 
-Lain can optionally reach back to a small agent on your laptop so she can
-check system diagnostics, look up/read files, or check/change your Omarchy
-theme when you ask her to — e.g. "can you check your diagnostics?" or "find
-files with 'invoice' in the name" or "read my package.json" or "switch to
-the Tokyo Night theme". This is entirely opt-in and off by default.
+Lain can optionally reach a small agent running on this same machine so
+she can check system diagnostics, look up/read files, or check/change
+your Omarchy theme when you ask her to — e.g. "can you check your
+diagnostics?" or "find files with 'invoice' in the name" or "read my
+package.json" or "switch to the Tokyo Night theme". This is entirely
+opt-in and off by default.
 
 **Security model:**
 
@@ -279,12 +298,11 @@ the Tokyo Night theme". This is entirely opt-in and off by default.
   theme tools don't touch the filesystem at all (they shell out to
   `hyprctl`/`omarchy-theme-list`/`omarchy-theme-set`), so this restriction
   doesn't apply to them.
-- **Token-authenticated + LAN-only.** The agent requires a bearer token for
-  every request (except its own unauthenticated `/health` check) and should
-  only be reachable from your home server via a firewall rule, never
-  exposed to the internet.
+- **Token-authenticated + local-only.** The agent requires a bearer token
+  for every request (except its own unauthenticated `/health` check).
+  Since Lain is local-only, this never needs to leave your machine.
 
-### 1. Laptop: install the tools agent
+### 1. Install the tools agent
 
 ```
 ./scripts/setup-tools-agent.sh
@@ -294,8 +312,7 @@ This installs the agent to `~/.local/share/lain/tools-agent.js`, prompts
 for (or accepts as env vars) a port, allowed root directories, and
 generates/reuses an auth token, then registers and starts it as a
 `systemd --user` service (`lain-tools-agent.service`). It prints the
-`LAIN_TOOLS_URL`/`LAIN_TOOLS_TOKEN` to copy into the local `.env`, plus
-the exact `ufw allow` command to run so the home server can reach it.
+`LAIN_TOOLS_URL`/`LAIN_TOOLS_TOKEN` to copy into the local `.env`.
 
 Check it's running any time with:
 
@@ -303,12 +320,13 @@ Check it's running any time with:
 systemctl --user status lain-tools-agent
 ```
 
-### 2. Server: point Lain at it
+### 2. Point Lain at it
 
-Add to the local `.env`:
+Add to the local `.env` (the LAN IP is needed, not `localhost`, since the
+Lain container is on a separate Docker network from the agent):
 
 ```
-LAIN_TOOLS_URL=http://<laptop-lan-ip>:8787
+LAIN_TOOLS_URL=http://<this-machine-lan-ip>:8787
 LAIN_TOOLS_TOKEN=<token printed by the setup script>
 ```
 
@@ -322,7 +340,7 @@ reachable, so you can confirm connectivity at a glance (also reported by
 
 ### Available tools
 
-- **System diagnostics** – uptime, CPU/memory/disk usage on the laptop.
+- **System diagnostics** – uptime, CPU/memory/disk usage.
 - **Find files** – search for files by name under an allowed directory.
 - **Search files** – search file contents for a text match.
 - **Read file** – read (and summarize) the contents of a specific file.
@@ -343,14 +361,14 @@ the timing herself:
 - "Every morning at 7, get me the news"
 
 Creating or cancelling a reminder requires the same Allow/Deny confirmation
-as the laptop tools; just asking what reminders you have doesn't. When a
+as the other tools; just asking what reminders you have doesn't. When a
 reminder is due, Lain delivers it over whichever channels are configured:
 
-- **Desktop notification** on your laptop, via the same tools agent used for
+- **Desktop notification** on this machine, via the same tools agent used for
   diagnostics/files (`notify-send`) — see the "Tools access" section above
   for setup. No extra configuration needed beyond that.
 - **Browser push notification**, which also works on your phone or when the
-  laptop is off/asleep. Requires a one-time VAPID keypair:
+  this machine is off/asleep. Requires a one-time VAPID keypair:
 
   ```
   node -e "console.log(require('web-push').generateVAPIDKeys())"
@@ -366,7 +384,7 @@ reminder is due, Lain delivers it over whichever channels are configured:
 
   Redeploy, then open Settings (click your name in the sidebar) → toggle
   "Notifications" on and allow the browser permission prompt.
-- **Email**, via SMTP (works even when your laptop/phone are off). Add SMTP
+- **Email**, via SMTP (works even when this machine/your phone are off). Add SMTP
   credentials to the local `.env` — for Gmail, generate an
   [App Password](https://myaccount.google.com/apppasswords) (requires
   2-Step Verification) rather than using your normal password:
