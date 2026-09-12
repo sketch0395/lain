@@ -16,6 +16,12 @@
 # Diagnostics and file tools work fine without them; the Omarchy tools will
 # just error out if called on a machine that isn't running Omarchy.
 #
+# Forensics tools (hash_file, file_metadata, extract_strings, list_processes,
+# network_connections, search_logs, recent_file_activity, login_history,
+# analyze_pcap) work out of the box, except analyze_pcap (needs `tcpdump`)
+# and EXIF data in file_metadata (needs `exiftool`) — this script offers to
+# install both automatically via pacman if missing.
+#
 # Env overrides (optional, otherwise you'll be prompted):
 #   LAIN_TOOLS_PORT           default 8787
 #   LAIN_TOOLS_ALLOWED_ROOTS  comma-separated dirs Lain may read (default: $HOME)
@@ -40,6 +46,38 @@ fi
 if ! command -v hyprctl >/dev/null 2>&1 || ! command -v omarchy-theme-set >/dev/null 2>&1; then
   echo "warning: hyprctl/omarchy-theme-set not found on PATH — the Omarchy" >&2
   echo "  status/theme tools won't work here, but diagnostics/file tools will." >&2
+fi
+
+# --- Optional forensics-tool dependencies -----------------------------------
+# tcpdump powers analyze_pcap; exiftool adds EXIF data to file_metadata for
+# images. Both are optional — the corresponding features just degrade
+# gracefully (analyze_pcap errors clearly, EXIF comes back null) if missing —
+# but we try to install them automatically so a fresh install has full
+# functionality without the user having to know that in advance.
+missing_pkgs=()
+command -v tcpdump >/dev/null 2>&1 || missing_pkgs+=("tcpdump")
+command -v exiftool >/dev/null 2>&1 || missing_pkgs+=("perl-image-exiftool")
+
+if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
+  echo "==> Optional forensics dependencies missing: ${missing_pkgs[*]}"
+  if command -v pacman >/dev/null 2>&1; then
+    if [[ -t 0 ]]; then
+      read -r -p "Install with pacman now? [Y/n] " reply
+    else
+      reply="n"
+    fi
+    if [[ ! "$reply" =~ ^[Nn] ]]; then
+      sudo pacman -S --needed --noconfirm "${missing_pkgs[@]}" \
+        && echo "  - installed: ${missing_pkgs[*]}" \
+        || echo "  - install failed — analyze_pcap/EXIF will be unavailable until installed manually." >&2
+    else
+      echo "  - skipping — install later with: sudo pacman -S --needed ${missing_pkgs[*]}"
+    fi
+  else
+    echo "  - pacman not found (non-Arch system) — install the equivalent" >&2
+    echo "    packages for tcpdump/exiftool manually if you want analyze_pcap" >&2
+    echo "    and image EXIF data to work." >&2
+  fi
 fi
 
 mkdir -p "$INSTALL_DIR" "$CONFIG_DIR" "$UNIT_DIR"
