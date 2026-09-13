@@ -47,7 +47,7 @@ Non-interactive mode (skip all prompts): `./install.sh --non-interactive`.
 3. Follow **1–4** below: pull the Ollama model, create a GitHub/Google
    OAuth app, fill in `.env`, then `./deploy.sh`.
 4. Optional: run `./scripts/setup-omarchy-cli.sh` for the `lain` terminal
-   command + Hyprland shortcut (default `SUPER + A`, override with
+   command + Hyprland shortcut (default `SUPER + SHIFT + L`, override with
    `LAIN_KEYBIND` if that's already taken), and
    `./scripts/setup-tools-agent.sh` if you want Lain to access
    diagnostics/files/Omarchy theme switching.
@@ -228,15 +228,15 @@ Leave this blank/unset to disable CLI access entirely.
 This installs `bin/lain` to `~/.local/bin/lain`, prompts for your
 `LAIN_URL`/`LAIN_API_TOKEN` and writes `~/.config/lain/config`
 (`chmod 600`), and — if running on Omarchy — adds a Hyprland keybinding
-(default `SUPER + A`; set `LAIN_KEYBIND` to override, e.g. `SUPER + L` if
-`SUPER + A` is already taken by something else), floating window rule,
+(default `SUPER + SHIFT + L`; set `LAIN_KEYBIND` to override, e.g. `SUPER + J` if
+`SUPER + SHIFT + L` is already taken by something else), floating window rule,
 and launcher entry (see section 3). It's idempotent: safe to re-run, and
 existing config is left alone unless you pass `--force`.
 
 To set up non-interactively:
 
 ```
-LAIN_URL=http://localhost:3000 LAIN_API_TOKEN=<token> LAIN_KEYBIND="SUPER + L" \
+LAIN_URL=http://localhost:3000 LAIN_API_TOKEN=<token> LAIN_KEYBIND="SUPER + J" \
   ./scripts/setup-omarchy-cli.sh --non-interactive
 ```
 
@@ -282,7 +282,7 @@ full message history and memory carry over.
 
 `scripts/setup-omarchy-cli.sh` handles this automatically. What it sets up:
 
-- **Keybinding**: `SUPER + A` opens a small floating terminal running
+- **Keybinding**: `SUPER + SHIFT + L` opens a small floating terminal running
   `lain --pick` (`~/.config/hypr/bindings.lua` + a window rule in
   `~/.config/hypr/hyprland.lua` matching `app-id = lain-cli`) — this shows
   a quick picker (fzf if installed, a numbered menu otherwise) of your most

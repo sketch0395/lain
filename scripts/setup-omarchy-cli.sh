@@ -9,7 +9,7 @@
 #   LAIN_URL=... LAIN_API_TOKEN=... ./scripts/setup-omarchy-cli.sh --non-interactive
 #
 # Env overrides:
-#   LAIN_KEYBIND   Hyprland keybinding to use (default: "SUPER + A")
+#   LAIN_KEYBIND   Hyprland keybinding to use (default: "SUPER + SHIFT + L")
 #   LAIN_URL / LAIN_API_TOKEN   skip the interactive prompt if both are set
 
 set -euo pipefail
@@ -22,7 +22,7 @@ CONFIG_FILE="$CONFIG_DIR/config"
 BINDINGS_FILE="$HOME/.config/hypr/bindings.lua"
 HYPRLAND_FILE="$HOME/.config/hypr/hyprland.lua"
 MENU_FILE="$HOME/.config/omarchy/extensions/omarchy-menu.jsonc"
-KEYBIND="${LAIN_KEYBIND:-SUPER + A}"
+KEYBIND="${LAIN_KEYBIND:-SUPER + SHIFT + L}"
 APP_ID="lain-cli"
 
 MARKER_BEGIN="-- >>> lain-cli (managed by scripts/setup-omarchy-cli.sh) >>>"
