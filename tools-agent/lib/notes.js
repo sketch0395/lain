@@ -17,6 +17,7 @@ function registerRoutes(router) {
     isAllowed,
     send,
     readJsonBody,
+    author: "Lain",
   });
 }
 
