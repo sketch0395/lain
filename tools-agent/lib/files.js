@@ -6,6 +6,30 @@ const { SKIP_DIRS, MAX_FILE_SCAN_BYTES, BINARY_EXTENSIONS, ALLOWED_ROOTS } = req
 const { resolveInputPath, isAllowed, looksBinary, walk } = require("./paths");
 const { send } = require("./http");
 
+// A model that guesses an out-of-bounds root (e.g. "/") gets a bare 403
+// with no way to recover on its own. Including the actual allowed root(s)
+// lets it self-correct — retry with no root (defaults to the first
+// allowed root) or an absolute path under one of these — instead of
+// giving up and asking the user for more context.
+function rootNotAllowedError() {
+  return {
+    error: "root not allowed",
+    hint:
+      `That path is outside the directories you're allowed to access. ` +
+      `Omit "root" to default to ${ALLOWED_ROOTS[0]}, or use an absolute ` +
+      `path under one of: ${ALLOWED_ROOTS.join(", ")}.`,
+  };
+}
+
+function pathNotAllowedError() {
+  return {
+    error: "path not allowed",
+    hint:
+      `That path is outside the directories you're allowed to access. ` +
+      `Use an absolute path under one of: ${ALLOWED_ROOTS.join(", ")}.`,
+  };
+}
+
 function findFiles(query, root, limit) {
   const results = [];
   const q = query.toLowerCase();
@@ -167,7 +191,7 @@ function registerRoutes(router) {
     const limit = Math.min(Number(url.searchParams.get("limit")) || 30, 100);
     if (!query) return send(res, 400, { error: "q is required" });
     const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
-    if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+    if (!isAllowed(root)) return send(res, 403, rootNotAllowedError());
     return send(res, 200, { results: findFiles(query, root, limit) });
   });
 
@@ -177,7 +201,7 @@ function registerRoutes(router) {
     const limit = Math.min(Number(url.searchParams.get("limit")) || 20, 50);
     if (!query) return send(res, 400, { error: "q is required" });
     const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
-    if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+    if (!isAllowed(root)) return send(res, 403, rootNotAllowedError());
     return send(res, 200, { results: searchFiles(query, root, limit) });
   });
 
@@ -185,7 +209,7 @@ function registerRoutes(router) {
     const rootArg = url.searchParams.get("root");
     const limit = Math.min(Number(url.searchParams.get("limit")) || 100, 500);
     const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
-    if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+    if (!isAllowed(root)) return send(res, 403, rootNotAllowedError());
     const stat = fs.statSync(root);
     if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
     return send(res, 200, { root, entries: listDirectory(root, limit) });
@@ -203,7 +227,7 @@ function registerRoutes(router) {
       100000
     );
     const root = rootArg ? resolveInputPath(rootArg) : ALLOWED_ROOTS[0];
-    if (!isAllowed(root)) return send(res, 403, { error: "root not allowed" });
+    if (!isAllowed(root)) return send(res, 403, rootNotAllowedError());
     const stat = fs.statSync(root);
     if (!stat.isDirectory()) return send(res, 400, { error: "not a directory" });
     return send(res, 200, {
@@ -217,7 +241,7 @@ function registerRoutes(router) {
     const maxBytes = Math.min(Number(url.searchParams.get("max")) || 20000, 100000);
     if (!p) return send(res, 400, { error: "path is required" });
     const resolved = resolveInputPath(p);
-    if (!isAllowed(resolved)) return send(res, 403, { error: "path not allowed" });
+    if (!isAllowed(resolved)) return send(res, 403, pathNotAllowedError());
     const stat = fs.statSync(resolved);
     if (!stat.isFile()) return send(res, 400, { error: "not a file" });
     return send(res, 200, readFileSafe(resolved, maxBytes));
