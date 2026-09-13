@@ -19,9 +19,9 @@
 //
 // This file is just the HTTP entrypoint — each group of tools lives in its
 // own module under lib/ (config, path/sandboxing helpers, and one file per
-// tool domain: diagnostics, omarchy, files, forensics, notify, update,
-// capabilities), and registers its own routes via the tiny router in
-// lib/http.js.
+// tool domain: diagnostics, omarchy, files, forensics, notify, notes,
+// update, capabilities), and registers its own routes via the tiny router
+// in lib/http.js.
 //
 // Security model:
 //   - Every request (except /health) requires a bearer token, compared
@@ -29,7 +29,9 @@
 //   - Mostly read-only. The exceptions that change anything on the
 //     laptop are `notify-send` (reminder notifications), `omarchy-theme-set`
 //     (theme switching, only after validating the requested name against
-//     the actual installed theme list), and a single, fixed `setcap`
+//     the actual installed theme list), create_note (writes/appends .md
+//     files, but only inside LAIN_TOOLS_NOTES_DIR, sandboxed the same as
+//     every other filesystem access), and a single, fixed `setcap`
 //     invocation used solely to grant tcpdump packet-capture permissions
 //     (lib/capabilities.js — not an LLM tool; only reachable from a
 //     dedicated, non-chat password prompt in the main app, so a user's
@@ -64,6 +66,7 @@ require("./lib/omarchy").registerRoutes(router);
 require("./lib/files").registerRoutes(router);
 require("./lib/forensics").registerRoutes(router);
 require("./lib/notify").registerRoutes(router);
+require("./lib/notes").registerRoutes(router);
 require("./lib/update").registerRoutes(router);
 require("./lib/capabilities").registerRoutes(router);
 

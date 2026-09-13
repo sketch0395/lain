@@ -103,7 +103,12 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "investigate a file, check for suspicious activity, or otherwise act as " +
   "a forensics analyst — explain findings in plain language, not just raw " +
   "tool output. Only use any of these tools when the user is actually " +
-  "asking about their computer or files.";
+  "asking about their computer or files." +
+  "\n\nYou also have create_note: saves/appends/replaces a markdown (.md) " +
+  "file in the user's Documents folder. Use it when the user asks you to " +
+  "write something down, save a list/summary as a file, or add to an " +
+  "existing note by title — as opposed to remember_fact, which is for " +
+  "short durable facts about the user, not file content.";
 
 function currentTimeAddendum() {
   const now = new Date();

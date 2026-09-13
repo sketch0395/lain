@@ -48,6 +48,7 @@ denylist (see `tools-agent/lib/paths.js`).
 | `login_history`           | Recent logins (`last`) + who's currently logged in (`who`)            | `limit`                              | `GET /login-history`   | `tools-agent/lib/forensics.js`       |
 | `analyze_pcap`            | Sample packets from a `.pcap`/`.pcapng`/`.cap` (via `tcpdump -r`)     | `path`, `limit`                      | `GET /pcap`             | `tools-agent/lib/forensics.js`       |
 | `capture_packets`         | Live packet capture for a bounded time/count (via `tcpdump`), always saved to `.pcap` by default | `interface`, `filter`, `duration`, `limit`, `save_path`, `no_save` | `POST /capture` | `tools-agent/lib/forensics.js`       |
+| `create_note`             | Create/append/replace a markdown `.md` note file in `~/Documents` (or `LAIN_TOOLS_NOTES_DIR`) | `title`, `content`, `mode` | `POST /note` | `tools-agent/lib/notes.js`           |
 | `omarchy_status`          | Current theme, active window/workspace, monitors (`hyprctl`)         | —                                    | `GET /omarchy/status`   | `tools-agent/lib/omarchy.js`         |
 | `list_omarchy_themes`     | Installed theme names (`omarchy-theme-list`)                          | —                                    | `GET /omarchy/themes`   | `tools-agent/lib/omarchy.js`         |
 | `set_omarchy_theme`       | Switch the desktop theme (`omarchy-theme-set`, name-validated)        | `theme`                              | `POST /omarchy/theme`  | `tools-agent/lib/omarchy.js`         |

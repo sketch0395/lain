@@ -24,6 +24,13 @@ const ALLOWED_ROOTS = (process.env.LAIN_TOOLS_ALLOWED_ROOTS || os.homedir())
   .filter(Boolean)
   .map((p) => path.resolve(p));
 
+// Where create_note writes .md files. Must resolve inside one of
+// ALLOWED_ROOTS (checked at request time via isAllowed), same as every
+// other filesystem access this agent makes.
+const NOTES_DIR = path.resolve(
+  process.env.LAIN_TOOLS_NOTES_DIR || path.join(os.homedir(), "Documents")
+);
+
 const DENY_PATTERNS = [
   /(^|\/)\.ssh(\/|$)/i,
   /(^|\/)\.gnupg(\/|$)/i,
@@ -72,6 +79,7 @@ module.exports = {
   TOKEN,
   REPO_DIR,
   ALLOWED_ROOTS,
+  NOTES_DIR,
   DENY_PATTERNS,
   SKIP_DIRS,
   MAX_FILE_SCAN_BYTES,

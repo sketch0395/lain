@@ -35,6 +35,7 @@
 #   LAIN_TOOLS_PORT           default 8787
 #   LAIN_TOOLS_ALLOWED_ROOTS  comma-separated dirs Lain may read (default: $HOME)
 #   LAIN_TOOLS_TOKEN          reuse an existing token instead of generating one
+#   LAIN_TOOLS_NOTES_DIR      where create_note saves .md files (default: ~/Documents)
 
 set -euo pipefail
 
