@@ -15,7 +15,7 @@ setup required.
 ## Quick start (new Omarchy machine)
 
 ```bash
-git clone <this repo> && cd lain
+git clone --recurse-submodules <this repo> && cd lain
 ./install.sh
 ```
 
@@ -43,7 +43,7 @@ Non-interactive mode (skip all prompts): `./install.sh --non-interactive`.
    You'll also want `ollama` installed (`sudo pacman -S ollama` or see
    [ollama.com](https://ollama.com)) and `node`/`npm` if you plan to run
    `npm run dev` instead of Docker.
-2. `git clone <this repo> && cd lain`
+2. `git clone --recurse-submodules <this repo> && cd lain`
 3. Follow **1–4** below: pull the Ollama model, create a GitHub/Google
    OAuth app, fill in `.env`, then `./deploy.sh`.
 4. Optional: run `./scripts/setup-omarchy-cli.sh` for the `lain` terminal

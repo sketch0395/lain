@@ -1,0 +1,3 @@
+[submodule "tools-agent/shared"]
+	path = tools-agent/shared
+	url = https://github.com/sketch0395/assistant-tools.git

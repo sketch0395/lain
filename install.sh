@@ -34,6 +34,14 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$REPO_DIR"
 
+# Pull in the shared tools submodule (tools-agent/shared) if it's missing
+# or empty — needed for tools like create_note. Harmless no-op if already
+# initialized, and safe to skip if this isn't a git checkout (e.g. a
+# tarball) or there's no network access.
+if [[ -f .gitmodules ]] && command -v git >/dev/null 2>&1; then
+  git submodule update --init --recursive 2>/dev/null || true
+fi
+
 non_interactive="false"
 for arg in "$@"; do
   case "$arg" in
