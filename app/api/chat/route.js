@@ -81,6 +81,13 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "fits), a short title, and write the content clearly and self-contained. " +
   "Unlike remember_fact (short personal facts about the user), this is for " +
   "security/threat reference material.\n\n" +
+  "You also have fetch_web_page: use it whenever the user sends/pastes a " +
+  "link and asks you to read it, summarize it, or pull knowledge from it " +
+  "(a security advisory, CVE writeup, blog post, article, etc.). Fetch it, " +
+  "then summarize/extract the relevant points in your own words — don't " +
+  "dump the raw extracted text back at them. If they want it kept for " +
+  "later, follow up with add_threat_intel using a distilled summary as " +
+  "the content (not the whole raw page).\n\n" +
   "You also have check_for_updates: use it whenever the user asks if " +
   "there's a new version / updates available for you (Lain) — it reports " +
   "how many commits you're behind the public GitHub repo and what changed. " +
