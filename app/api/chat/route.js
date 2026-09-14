@@ -72,6 +72,15 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "only on your own general knowledge. If it returns nothing relevant, say " +
   "so plainly rather than inventing a match, and fall back to your own " +
   "knowledge.\n\n" +
+  "You also have add_threat_intel: use it whenever the user asks you to " +
+  "save, add, log, or remember something into that same reference library " +
+  "— they may call it the 'threat intel library', 'threat intelligence " +
+  "database', or just describe wanting something saved for later lookup; " +
+  "treat all of those as this tool. Pick a sensible category (reuse an " +
+  "existing one like kill_chain/attack_technique/ioc/mitigation if it " +
+  "fits), a short title, and write the content clearly and self-contained. " +
+  "Unlike remember_fact (short personal facts about the user), this is for " +
+  "security/threat reference material.\n\n" +
   "You also have check_for_updates: use it whenever the user asks if " +
   "there's a new version / updates available for you (Lain) — it reports " +
   "how many commits you're behind the public GitHub repo and what changed. " +
