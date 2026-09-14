@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import RemindersPanel from "./RemindersPanel";
 import AboutMePanel from "./AboutMePanel";
 import MemoriesPanel from "./MemoriesPanel";
+import ThreatIntelPanel from "./ThreatIntelPanel";
 import WipeMemoryModal from "./WipeMemoryModal";
 import GrantCapturePermissionModal from "./GrantCapturePermissionModal";
 
@@ -25,6 +26,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
   const [remindersOpen, setRemindersOpen] = useState(false);
   const [aboutMeOpen, setAboutMeOpen] = useState(false);
   const [memoriesOpen, setMemoriesOpen] = useState(false);
+  const [threatIntelOpen, setThreatIntelOpen] = useState(false);
   const [wipeMemoryOpen, setWipeMemoryOpen] = useState(false);
   const [grantCaptureOpen, setGrantCaptureOpen] = useState(false);
   const [tone, setTone] = useState(null);
@@ -601,6 +603,18 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 type="button"
                 onClick={() => {
                   setSettingsOpen(false);
+                  setThreatIntelOpen(true);
+                }}
+                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+              >
+                <span>🛡️ Threat Intel</span>
+                <span className="opacity-60">›</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setSettingsOpen(false);
                   setWipeMemoryOpen(true);
                 }}
                 title="Permanently erase everything Lain has learned and remembered about you"
@@ -722,6 +736,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
       {aboutMeOpen && <AboutMePanel onClose={() => setAboutMeOpen(false)} />}
 
       {memoriesOpen && <MemoriesPanel onClose={() => setMemoriesOpen(false)} />}
+      {threatIntelOpen && <ThreatIntelPanel onClose={() => setThreatIntelOpen(false)} />}
 
       {wipeMemoryOpen && (
         <WipeMemoryModal
