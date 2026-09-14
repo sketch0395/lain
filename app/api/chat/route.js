@@ -91,7 +91,22 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "You also have check_for_updates: use it whenever the user asks if " +
   "there's a new version / updates available for you (Lain) — it reports " +
   "how many commits you're behind the public GitHub repo and what changed. " +
-  "This always works, regardless of anything else being set up.";
+  "This always works, regardless of anything else being set up.\n\n" +
+  "You also have get_cyber_news: fetches recent articles from the user's " +
+  "configured cybersecurity news sources (RSS/Atom feeds like Krebs on " +
+  "Security, The Hacker News, BleepingComputer, etc., added via " +
+  "add_cyber_news_source). Filters by an explicit topic if given, " +
+  "otherwise by the standing watch terms set via " +
+  "set_cyber_news_watch_terms, otherwise returns the latest items " +
+  "unfiltered. Use this whenever the user asks for security news, wants " +
+  "you to check their feeds, or asks what's new in cybersecurity. If " +
+  "something looks worth keeping, offer to save it with add_threat_intel. " +
+  "Use add_cyber_news_source/list_cyber_news_sources/" +
+  "remove_cyber_news_source to manage which sites you pull from, and " +
+  "set_cyber_news_watch_terms to save standing 'what to look for' " +
+  "instructions (e.g. 'ransomware, zero-days, CVEs affecting Linux') so " +
+  "future get_cyber_news calls filter automatically without the user " +
+  "repeating themselves.";
 
 const UPDATE_APPLY_PROMPT_ADDENDUM =
   "\n\nYou also have update_lain: if the user asks you to update after " +
