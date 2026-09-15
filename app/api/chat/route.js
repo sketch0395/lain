@@ -16,6 +16,7 @@ import { profilePromptAddendum } from "@/lib/profile";
 import { memoryPromptAddendum } from "@/lib/memory";
 import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP } from "@/lib/ollama";
 import { detectTone } from "@/lib/tone";
+import { shodanConfigured } from "@/lib/shodan";
 
 const TIMEZONE = process.env.LAIN_TIMEZONE || "America/Chicago";
 
@@ -108,6 +109,20 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "future get_cyber_news calls filter automatically without the user " +
   "repeating themselves.";
 
+const SHODAN_PROMPT_ADDENDUM =
+  "\n\nYou also have Shodan.io tools: shodan_host_lookup (everything " +
+  "Shodan knows about a public IP — open ports, service banners, known " +
+  "CVEs, org/location), shodan_search (query Shodan's search syntax, e.g. " +
+  "'apache country:US' or 'product:MongoDB', to find exposed instances of " +
+  "something), shodan_dns_lookup (resolve a hostname to an IP first if " +
+  "the user gives you a domain instead), and shodan_account_info (check " +
+  "remaining query/scan credits). Use these when the user asks what's " +
+  "exposed on an IP/domain, wants recon on a host, or is researching " +
+  "internet-wide exposure of a product/vulnerability. Only works for " +
+  "public IPs Shodan has actually scanned. If you find something notable " +
+  "(an exposed/vulnerable service), offer to save it with " +
+  "add_threat_intel.";
+
 const UPDATE_APPLY_PROMPT_ADDENDUM =
   "\n\nYou also have update_lain: if the user asks you to update after " +
   "check_for_updates showed something to pull, confirm they want to " +
@@ -179,6 +194,9 @@ export async function POST(request) {
   const tone = detectTone(message);
   let systemPrompt = personality === false ? NEUTRAL_PROMPT : PERSONALITY_PROMPT;
   systemPrompt += TOOLS_PROMPT_ADDENDUM_BASE;
+  if (shodanConfigured()) {
+    systemPrompt += SHODAN_PROMPT_ADDENDUM;
+  }
   if (toolsConfigured()) {
     systemPrompt += LAPTOP_TOOLS_PROMPT_ADDENDUM;
     systemPrompt += UPDATE_APPLY_PROMPT_ADDENDUM;

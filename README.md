@@ -416,6 +416,25 @@ so this only works if the tools agent is set up (see above) and
 `scripts/setup-tools-agent.sh`). You can also just run
 `./scripts/update.sh` yourself any time from the repo directory.
 
+## Shodan.io integration (optional)
+
+Lets Lain look up what's publicly exposed on an IP or domain — open ports,
+service banners, known CVEs, organization/location — and run Shodan search
+queries (e.g. "find exposed MongoDB instances"). Fully optional and
+independent of the tools agent above.
+
+1. Get an API key at [account.shodan.io](https://account.shodan.io/) (a
+   free Membership key works for basic lookups; paid plans unlock more
+   query credits and search).
+2. `./deploy.sh` prompts for a key on a fresh install if `SHODAN_API_KEY`
+   isn't already set in `.env` — just paste it in when asked. You can also
+   set it manually any time: add `SHODAN_API_KEY=...` to `.env`, then
+   `./deploy.sh` to pick it up. Leave it blank to disable — Lain simply
+   won't offer these tools.
+3. Ask Lain things like "what's exposed on 1.2.3.4?", "search Shodan for
+   exposed RDP in Texas", or "resolve example.com and check what's running
+   on it".
+
 ## Reminders & notifications
 
 Ask Lain to remind you about things in plain language — she'll figure out

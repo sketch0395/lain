@@ -67,6 +67,36 @@ if ! tools_configured; then
   fi
 fi
 
+# --- Shodan.io integration (optional) ---
+# Offers to set this up on a fresh install the same way the tools agent is
+# offered above, so the feature is discoverable instead of silently unused
+# because nobody knew to add SHODAN_API_KEY to .env themselves.
+shodan_configured() {
+  grep -qE '^SHODAN_API_KEY=\S+' .env 2>/dev/null
+}
+
+if ! shodan_configured; then
+  if [[ "${LAIN_SKIP_SHODAN_SETUP:-}" == "true" ]]; then
+    : # explicitly opted out, skip silently
+  elif [[ -t 0 ]]; then
+    echo
+    echo "Lain can optionally look up what's publicly exposed on an IP/domain"
+    echo "via Shodan.io (shodan_host_lookup/shodan_search/etc) when you ask."
+    echo "Get a free or paid API key at https://account.shodan.io/"
+    read -rp "Enter a Shodan API key now to enable this? (blank to skip) " shodan_key
+    if [[ -n "$shodan_key" ]]; then
+      set_env_var SHODAN_API_KEY "$shodan_key"
+      echo "==> Wired up SHODAN_API_KEY in .env"
+    else
+      echo "==> Skipping — add SHODAN_API_KEY to .env any time to enable it later."
+    fi
+  else
+    echo "==> Shodan integration not configured and no terminal to prompt (non-interactive run)."
+    echo "    Add SHODAN_API_KEY to .env, then re-run ./deploy.sh to enable it."
+    echo "    Set LAIN_SKIP_SHODAN_SETUP=true to silence this message."
+  fi
+fi
+
 echo "==> Building and starting Lain via docker compose (local)"
 export GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 docker compose up -d --build

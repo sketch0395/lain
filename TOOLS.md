@@ -98,6 +98,32 @@ conversation history.
 | `get_news`              | Fetch current top headlines, optionally by topic                             | `topic`                                                                | `lib/news.js`            |
 | `remember_fact`         | Save a short, durable fact about the user for future conversations           | `fact`                                                                 | `lib/memory.js`          |
 
+## Shared tools (assistant-tools submodule)
+
+These live in `tools-agent/shared/tools/*.js` — the
+[assistant-tools](https://github.com/sketch0395/assistant-tools) submodule
+shared with Asuna, so definitions/wording/dispatch logic can't drift
+between the two assistants. Each has a thin host adapter under `lib/`
+(e.g. `lib/shodan.js`) that injects host-specific config (a DB handle, an
+API key) into the shared implementation. Always available server-side —
+no laptop tools agent required — but some (Shodan) need their own optional
+API key configured.
+
+| Tool (function name)       | What it does                                                          | Key params                     | Shared module            | Requires                |
+|------------------------------|--------------------------------------------------------------------------|-----------------------------------|-----------------------------|----------------------------|
+| `lookup_threat_intel`       | Search the threat intel library (categories/titles/tags/content)        | `query`, `limit`                | `tools/threatIntel.js`     | —                          |
+| `add_threat_intel`          | Save/log an entry into the threat intel library                         | `category`, `title`, `content`, `tags` | `tools/threatIntel.js` | —                          |
+| `fetch_web_page`            | Fetch a URL and extract readable text (for summarizing articles/advisories) | `url`                        | `tools/webFetch.js`        | —                          |
+| `get_cyber_news`            | Fetch recent items from configured cybersecurity RSS/Atom sources        | `topic`, `limit`                | `tools/cyberNews.js`       | —                          |
+| `add_cyber_news_source`     | Add an RSS/Atom feed to pull cyber news from                            | `name`, `url`                   | `tools/cyberNews.js`       | —                          |
+| `list_cyber_news_sources`   | List configured cyber news sources                                       | —                                | `tools/cyberNews.js`       | —                          |
+| `remove_cyber_news_source`  | Remove a configured cyber news source                                    | `name_or_url`                   | `tools/cyberNews.js`       | —                          |
+| `set_cyber_news_watch_terms`| Save standing "what to look for" filter terms for `get_cyber_news`       | `watch_terms`                   | `tools/cyberNews.js`       | —                          |
+| `shodan_host_lookup`        | Everything Shodan knows about a public IP (ports, banners, CVEs, org)    | `ip`                             | `tools/shodan.js`          | `SHODAN_API_KEY`           |
+| `shodan_search`             | Run a Shodan search query (Shodan query syntax)                         | `query`, `limit`                | `tools/shodan.js`          | `SHODAN_API_KEY`           |
+| `shodan_dns_lookup`         | Resolve hostname(s) to IP address(es) via Shodan's DNS API               | `hostnames`                      | `tools/shodan.js`          | `SHODAN_API_KEY`           |
+| `shodan_account_info`       | Check the configured Shodan API key's plan/remaining credits             | —                                | `tools/shodan.js`          | `SHODAN_API_KEY`           |
+
 ## Adding a new tool
 
 1. **Laptop tool**: add the logic + a route in the relevant
