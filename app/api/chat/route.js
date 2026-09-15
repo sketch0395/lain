@@ -7,6 +7,7 @@ import {
 import {
   describeToolCall,
   executeTool,
+  getToolDefinitions,
   parseArgs,
   requiresConfirmation,
   toolsConfigured,
@@ -235,6 +236,29 @@ function emptyReplyFallback(convId, stage) {
   return "Sorry, I didn't get anything back there — mind trying that again?";
 }
 
+// Some models (especially smaller/quantized ones) occasionally write out
+// what looks like a tool invocation as plain text instead of using
+// Ollama's real tool-calling mechanism — e.g. "<tool_code>hash_file{...}"
+// or a fenced block naming an actual tool followed by "{...}". This is
+// most common when a user's own message shows example tool-call syntax.
+// Detecting and retrying once (without saving the bad attempt to
+// conversation history) keeps a single hiccup from getting baked into
+// history, where the model tends to keep imitating its own past turn.
+const FAKE_TOOL_TAG_PATTERN = /<\/?\s*tool[_-]?(code|call)s?\s*>/i;
+let fakeToolNamePattern = null;
+function looksLikeFakeToolCall(text) {
+  if (!text) return false;
+  if (FAKE_TOOL_TAG_PATTERN.test(text)) return true;
+  if (!fakeToolNamePattern) {
+    const names = getToolDefinitions()
+      .map((t) => t.function?.name)
+      .filter(Boolean)
+      .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+    fakeToolNamePattern = new RegExp(`\\b(?:${names.join("|")})\\s*\\{`, "i");
+  }
+  return fakeToolNamePattern.test(text);
+}
+
 export async function POST(request) {
   const { message, conversationId, personality, deepThinking } = await request.json();
 
@@ -280,6 +304,37 @@ export async function POST(request) {
       },
       { status: 502 }
     );
+  }
+
+  // If no real tool_calls came back but the text looks like a hallucinated
+  // tool invocation, retry once with a pointed reminder rather than saving
+  // the garbled attempt to history (see looksLikeFakeToolCall above).
+  if (
+    useTools &&
+    !(Array.isArray(data.message?.tool_calls) && data.message.tool_calls.length > 0) &&
+    looksLikeFakeToolCall(data.message?.content)
+  ) {
+    console.error(
+      `[lain] model wrote a fake tool-call as text (conversation ${convId}) — retrying once`
+    );
+    try {
+      data = await callOllama(
+        [
+          ...messages,
+          {
+            role: "user",
+            content:
+              "That looked like literal tool-call syntax, not an actual tool " +
+              "invocation. Do not write pseudo-code — either call the real " +
+              "matching function now, or reply in plain language.",
+          },
+        ],
+        useTools,
+        { model }
+      );
+    } catch {
+      // Ignore — fall through and use the original (flawed) response below.
+    }
   }
 
   const toolCalls = data.message?.tool_calls;
