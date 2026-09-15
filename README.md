@@ -62,7 +62,18 @@ nothing Windows-specific to port for the server or the CLI. Steps:
 
 1. Install WSL2 if you don't have it: `wsl --install` in an admin
    PowerShell/Terminal, then pick a distro (Ubuntu is the default and
-   what's tested here).
+   what's tested here). **Important:** `./install.sh` is a bash script and
+   must be run *from inside* the Linux shell — open it via the "Ubuntu"
+   Start menu entry, or type `wsl` (with no arguments) in a terminal and
+   press Enter, then run commands from that prompt. Don't run
+   `.\install.sh` or `wsl .\install.sh` directly from PowerShell — Windows
+   doesn't know how to execute a `.sh` file, and passing a
+   PowerShell-style path (`.\`, backslashes) as a `wsl <cmd>` one-liner
+   argument can also trip up `wsl.exe` itself.
+   > If `wsl` crashes with `Catastrophic failure ... wsl/service/e_unexpected`
+   > even with no arguments, WSL's backend is just out of date — run
+   > `wsl --update` (then `wsl --shutdown` if it's still stuck) and try
+   > again. This is unrelated to Lain; it's a stock WSL issue.
 2. Install [Docker Desktop for Windows](https://docker.com/products/docker-desktop),
    then in **Settings > Resources > WSL Integration** enable it for your
    distro. This is the recommended way to get Docker in WSL — no `apt`
