@@ -121,8 +121,11 @@ else
       echo ""
       echo "$MARKER_BEGIN"
       echo "-- Lain chatbot: open a floating terminal running the CLI (window rule"
-      echo "-- for this app-id lives in hyprland.lua)."
-      echo "o.bind(\"$KEYBIND\", \"Lain\", \"foot --app-id $APP_ID lain --pick\")"
+      echo "-- for this app-id lives in hyprland.lua). No --pick here: fzf's picker"
+      echo "-- is unreliable as the very first thing in a brand-new terminal window."
+      echo "-- Use the in-app Tab menu -> \"Switch conversation...\" instead once it's"
+      echo "-- open (fzf works fine once the window is already rendering)."
+      echo "o.bind(\"$KEYBIND\", \"Lain\", \"foot --app-id $APP_ID lain\")"
       echo "$MARKER_END"
     } >> "$BINDINGS_FILE"
     log "Added $KEYBIND keybinding to $BINDINGS_FILE"
@@ -186,7 +189,7 @@ entry = (
     '    "icon": "\uf7d4",\n'
     '    "label": "Lain",\n'
     '    "description": "Personal AI chatbot",\n'
-    f'    "action": "foot --app-id {app_id} lain --pick"\n'
+    f'    "action": "foot --app-id {app_id} lain"\n'
     "  }\n"
 )
 
