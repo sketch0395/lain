@@ -1,8 +1,9 @@
 "use strict";
 
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
-const { execFileSync } = require("node:child_process");
+const { execFileSync, spawn } = require("node:child_process");
 const { OMARCHY_STATE_DIR } = require("./config");
 const { send, readJsonBody } = require("./http");
 
@@ -71,6 +72,147 @@ function omarchySetTheme(themeName) {
   return { theme: themeName };
 }
 
+const OMARCHY_THEMES_DIR = path.join(os.homedir(), ".config", "omarchy", "themes");
+
+// Matches the skill's guidance: "Unsure if command exists? Run `omarchy
+// commands`" — exposed as its own read-only, no-confirmation tool so the
+// LLM can self-discover what's available instead of guessing at
+// arguments for omarchy_command.
+function omarchyListCommands() {
+  const out = execFileSync("omarchy", ["commands", "--json"], {
+    encoding: "utf8",
+    timeout: 8000,
+  });
+  try {
+    return JSON.parse(out);
+  } catch {
+    // Fall back to the plain-text listing if --json isn't supported by
+    // this Omarchy version.
+    return { raw: out };
+  }
+}
+
+// Generic, synchronous passthrough for any `omarchy <args...>` invocation
+// (theme/font/refresh/restart/toggle/bar/plugin/hook/reminder/capture/
+// launch/system lock, etc.) — everything the skill documents as a "stock
+// omarchy command". Deliberately NOT restricted to an allowlist of
+// subcommands: `execFile` passes `args` straight to the kernel as an
+// argv array (no shell is ever involved), so there's no injection surface
+// regardless of content, and the caller (lib/tools.js) always requires
+// explicit user Allow/Deny confirmation before invoking this, showing the
+// literal command about to run. Only suitable for commands that finish
+// quickly and don't need interactive stdin (e.g. NOT `omarchy setup ...`
+// wizards) — use omarchyCommandBackground for slow ones (update, install,
+// pkg add, theme install, reinstall).
+function omarchyCommand(argv, { timeoutMs = 20000 } = {}) {
+  if (!Array.isArray(argv) || argv.length === 0 || argv.some((a) => typeof a !== "string")) {
+    throw new Error("argv must be a non-empty array of strings, e.g. [\"theme\", \"set\", \"catppuccin\"]");
+  }
+  const commandLabel = `omarchy ${argv.join(" ")}`;
+  try {
+    const stdout = execFileSync("omarchy", argv, {
+      encoding: "utf8",
+      timeout: timeoutMs,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    return { command: commandLabel, stdout: stdout.trim() };
+  } catch (err) {
+    if (err.signal === "SIGTERM" || err.killed) {
+      throw new Error(
+        `\`${commandLabel}\` timed out after ${timeoutMs}ms — it may be waiting on ` +
+          "interactive input (unsupported here) or is slow; try omarchy_command_background instead."
+      );
+    }
+    const stderr = (err.stderr || "").toString().trim();
+    throw new Error(stderr || `\`${commandLabel}\` failed (exit ${err.status ?? "?"})`);
+  }
+}
+
+// For slow/long-running omarchy commands (system update, package installs,
+// theme install from a git repo, full config reinstall) that would
+// otherwise block the HTTP request past any reasonable timeout. Mirrors
+// lib/update.js's approach: spawn detached, redirect output to a log file
+// in the OS temp dir, return immediately. The caller can check back later
+// by asking to read the log file (via the existing read_file tool) if
+// they want to see progress/output.
+function omarchyCommandBackground(argv) {
+  if (!Array.isArray(argv) || argv.length === 0 || argv.some((a) => typeof a !== "string")) {
+    throw new Error("argv must be a non-empty array of strings, e.g. [\"update\"]");
+  }
+  const commandLabel = `omarchy ${argv.join(" ")}`;
+  const logPath = path.join(os.tmpdir(), `omarchy-cmd-${Date.now()}.log`);
+  const logFd = fs.openSync(logPath, "a");
+  const child = spawn("omarchy", argv, {
+    detached: true,
+    stdio: ["ignore", logFd, logFd],
+  });
+  child.unref();
+  return { started: true, command: commandLabel, logFile: logPath };
+}
+
+// name must be a plain slug — no path separators or traversal — since it
+// becomes a directory name directly under ~/.config/omarchy/themes/.
+const THEME_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9 ._-]{0,63}$/;
+
+function omarchyThemeDir(name) {
+  if (!THEME_NAME_RE.test(name)) {
+    throw new Error(
+      "Invalid theme name — use letters, numbers, spaces, '.', '_', '-' only (no slashes)."
+    );
+  }
+  const dir = path.resolve(OMARCHY_THEMES_DIR, name);
+  if (path.dirname(dir) !== OMARCHY_THEMES_DIR) {
+    throw new Error("Invalid theme name.");
+  }
+  return dir;
+}
+
+// Creates (or overlays onto) a custom theme under ~/.config/omarchy/themes/
+// per theming.md: a directory containing at minimum a colors.toml, plus
+// optionally a downloaded background image. Never touches
+// /usr/share/omarchy/ (stock themes) — this only ever writes into the
+// user's own config dir. If `apply` is set, switches to the new theme
+// immediately afterward via the same validated omarchySetTheme path.
+async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, apply }) {
+  if (!name) throw new Error("name is required");
+  const dir = omarchyThemeDir(name);
+  fs.mkdirSync(dir, { recursive: true });
+
+  const written = [];
+  if (colorsToml) {
+    const colorsPath = path.join(dir, "colors.toml");
+    fs.writeFileSync(colorsPath, colorsToml, "utf8");
+    written.push("colors.toml");
+  }
+
+  if (backgroundUrl) {
+    const bgDir = path.join(dir, "backgrounds");
+    fs.mkdirSync(bgDir, { recursive: true });
+    const res = await fetch(backgroundUrl, { signal: AbortSignal.timeout(15000) });
+    if (!res.ok) {
+      throw new Error(`Failed to download background (HTTP ${res.status}): ${backgroundUrl}`);
+    }
+    const contentType = res.headers.get("content-type") || "";
+    const ext =
+      (contentType.includes("png") && ".png") ||
+      (contentType.includes("webp") && ".webp") ||
+      (contentType.includes("gif") && ".gif") ||
+      ".jpg";
+    const bgPath = path.join(bgDir, `background${ext}`);
+    const buf = Buffer.from(await res.arrayBuffer());
+    fs.writeFileSync(bgPath, buf);
+    written.push(`backgrounds/background${ext}`);
+  }
+
+  let applied = false;
+  if (apply) {
+    execFileSync("omarchy-theme-set", [name], { timeout: 10000 });
+    applied = true;
+  }
+
+  return { theme: name, dir, written, applied };
+}
+
 function registerRoutes(router) {
   router.get("/omarchy/status", (req, res) => send(res, 200, omarchyStatus()));
 
@@ -78,11 +220,47 @@ function registerRoutes(router) {
     send(res, 200, { themes: omarchyThemeList() })
   );
 
+  router.get("/omarchy/commands", (req, res) => {
+    try {
+      send(res, 200, omarchyListCommands());
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
+
   router.post("/omarchy/theme", async (req, res) => {
     const { theme } = await readJsonBody(req);
     if (!theme) return send(res, 400, { error: "theme is required" });
     try {
       send(res, 200, omarchySetTheme(theme));
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
+
+  router.post("/omarchy/theme/create", async (req, res) => {
+    const body = await readJsonBody(req);
+    if (!body.name) return send(res, 400, { error: "name is required" });
+    try {
+      send(res, 200, await omarchyCreateTheme(body));
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
+
+  router.post("/omarchy/command", async (req, res) => {
+    const { argv } = await readJsonBody(req);
+    try {
+      send(res, 200, omarchyCommand(argv));
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
+
+  router.post("/omarchy/command/background", async (req, res) => {
+    const { argv } = await readJsonBody(req);
+    try {
+      send(res, 200, omarchyCommandBackground(argv));
     } catch (err) {
       send(res, 500, { error: err.message });
     }
@@ -94,5 +272,10 @@ module.exports = {
   omarchyStatus,
   omarchyThemeList,
   omarchySetTheme,
+  omarchyListCommands,
+  omarchyCommand,
+  omarchyCommandBackground,
+  omarchyCreateTheme,
   registerRoutes,
 };
+

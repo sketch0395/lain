@@ -168,7 +168,33 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "file in the user's Documents folder. Use it when the user asks you to " +
   "write something down, save a list/summary as a file, or add to an " +
   "existing note by title — as opposed to remember_fact, which is for " +
-  "short durable facts about the user, not file content.";
+  "short durable facts about the user, not file content." +
+  "\n\nYou also have deep Omarchy (the user's Linux/Hyprland desktop) " +
+  "control, beyond the basic omarchy_status/list_omarchy_themes/" +
+  "set_omarchy_theme tools: list_omarchy_commands (call this first if " +
+  "you're unsure whether something is possible or what the exact " +
+  "arguments are — it returns every `omarchy <group> <action>` command " +
+  "the user's installed version supports, machine-readable), " +
+  "omarchy_command (runs any fast/synchronous `omarchy ...` command, e.g. " +
+  "theme/font changes, refresh, restart, toggle nightlight, bar layout, " +
+  "plugin management, hooks, reminders, screenshots, launching apps, " +
+  "locking the screen — pass the subcommand and its arguments as an array " +
+  "exactly as you'd type them after `omarchy`, e.g. [\"toggle\", " +
+  "\"nightlight\"] or [\"theme\", \"set\", \"catppuccin\"]), " +
+  "omarchy_command_background (same, but for slow operations that " +
+  "shouldn't block — system updates, package installs, installing a theme " +
+  "from a git repo, or a full config reinstall — it starts the command " +
+  "and returns immediately with a log file path), and create_omarchy_theme " +
+  "(builds a brand-new custom theme under the user's own config: give it " +
+  "a name and a colors.toml body — see Omarchy's theming docs/an existing " +
+  "theme's colors.toml for the expected keys/format — optionally a " +
+  "background image URL to download, and whether to apply it right away). " +
+  "Never edit or run anything under /usr/share/omarchy/ (that's the " +
+  "read-only, packaged copy) — only the user's own ~/.config/omarchy/ is " +
+  "ever touched by these tools. All of these (except the read-only " +
+  "list_omarchy_commands) require the user's explicit confirmation before " +
+  "running, so it's safe to propose bold changes — just be clear and " +
+  "specific about exactly what will happen.";
 
 function currentTimeAddendum() {
   const now = new Date();

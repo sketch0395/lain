@@ -25,10 +25,11 @@ There are two categories:
 
 ## Laptop tools
 
-All of these are read-only except `set_omarchy_theme` (changes desktop
-theme) and `update_lain` (pulls + rebuilds/restarts). Every file-path tool
-is restricted to `LAIN_TOOLS_ALLOWED_ROOTS` and blocked from a sensitive-path
-denylist (see `tools-agent/lib/paths.js`).
+All of these are read-only except `set_omarchy_theme`/`omarchy_command`/
+`omarchy_command_background`/`create_omarchy_theme` (change desktop
+config/state) and `update_lain` (pulls + rebuilds/restarts). Every
+file-path tool is restricted to `LAIN_TOOLS_ALLOWED_ROOTS` and blocked from
+a sensitive-path denylist (see `tools-agent/lib/paths.js`).
 
 | Tool (function name)     | What it does                                                        | Key params                          | Agent endpoint          | Agent module                       |
 |---------------------------|----------------------------------------------------------------------|--------------------------------------|--------------------------|--------------------------------------|
@@ -52,6 +53,10 @@ denylist (see `tools-agent/lib/paths.js`).
 | `omarchy_status`          | Current theme, active window/workspace, monitors (`hyprctl`)         | —                                    | `GET /omarchy/status`   | `tools-agent/lib/omarchy.js`         |
 | `list_omarchy_themes`     | Installed theme names (`omarchy-theme-list`)                          | —                                    | `GET /omarchy/themes`   | `tools-agent/lib/omarchy.js`         |
 | `set_omarchy_theme`       | Switch the desktop theme (`omarchy-theme-set`, name-validated)        | `theme`                              | `POST /omarchy/theme`  | `tools-agent/lib/omarchy.js`         |
+| `list_omarchy_commands`   | Self-discovery: full list of `omarchy` CLI commands/groups/args (`omarchy commands --json`) | — | `GET /omarchy/commands` | `tools-agent/lib/omarchy.js`  |
+| `omarchy_command`         | Run any fast/synchronous `omarchy` CLI command (argv array, no shell) | `argv`                               | `POST /omarchy/command` | `tools-agent/lib/omarchy.js`         |
+| `omarchy_command_background` | Run a slow/long-running `omarchy` command (update, install, pkg add, theme install) detached, logged to file | `argv` | `POST /omarchy/command/background` | `tools-agent/lib/omarchy.js` |
+| `create_omarchy_theme`    | Create a new custom theme under `~/.config/omarchy/themes/<name>` (colors.toml, optional background download), optionally apply it | `name`, `colors_toml`, `background_url`, `apply` | `POST /omarchy/theme/create` | `tools-agent/lib/omarchy.js` |
 | `update_lain`             | Pull latest changes + rebuild/restart Lain and the tools agent        | —                                    | `POST /update`          | `tools-agent/lib/update.js`          |
 
 The agent also exposes `GET /health` (unauthenticated liveness check) and
