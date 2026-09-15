@@ -163,6 +163,11 @@ pick_conversation() {
 
   local selected
   if command -v fzf >/dev/null; then
+    # Brief grace period: when this is the very first thing run in a
+    # freshly-spawned terminal window (e.g. the hotkey's "foot ... lain
+    # --pick"), fzf can occasionally start before the new pty/window is
+    # fully attached and misbehave (exit immediately with no selection).
+    sleep 0.15
     selected="$(printf '%s\n' "${menu_lines[@]}" | fzf --ansi --delimiter=$'\t' --with-nth=2 \
       --prompt="Continue which chat? " --height=~60% --reverse \
       --header="Enter: open   Esc: cancel")"
@@ -184,12 +189,15 @@ pick_conversation() {
 }
 
 if [[ "$pick_mode" == "true" ]]; then
-  picked_id="$(pick_conversation)" || {
-    echo "${MUTED}↳ Cancelled.${RESET}" >&2
-    exit 0
-  }
+  picked_id="$(pick_conversation)" || picked_id=""
 
-  if [[ "$picked_id" == "__new__" ]]; then
+  if [[ -z "$picked_id" ]]; then
+    # fzf failing/erroring (e.g. a startup race in a freshly opened terminal
+    # window) or the user cancelling shouldn't kill the whole window before
+    # the REPL even starts — fall through to the REPL with whatever
+    # conversation was already active (or a fresh one).
+    echo "${MUTED}↳ Picker cancelled/unavailable — continuing.${RESET}" >&2
+  elif [[ "$picked_id" == "__new__" ]]; then
     rm -f "$STATE_FILE"
     echo "${MUTED}↳ Starting a new conversation${RESET}" >&2
   else
