@@ -49,8 +49,17 @@ else
 fi
 
 is_omarchy="false"
+is_wsl="false"
+grep -qiE "microsoft|wsl" /proc/version 2>/dev/null && is_wsl="true"
+
 if [[ "$os_id" == "omarchy" ]]; then
   is_omarchy="true"
+elif [[ "$is_wsl" == "true" ]]; then
+  warn "Running under WSL — the CLI itself works fine here (plain bash)," \
+       "but the Hyprland keybinding and launcher entry are skipped since" \
+       "there's no Hyprland on Windows. For a similar global-hotkey" \
+       "experience, use AutoHotkey to bind a key to launching Windows" \
+       "Terminal running 'wsl bash -lc lain' (or asuna)."
 else
   warn "This doesn't look like Omarchy (ID=$os_id). The CLI will still be" \
        "installed, but the Hyprland keybinding and launcher entry will be" \

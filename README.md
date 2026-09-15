@@ -54,6 +54,39 @@ Non-interactive mode (skip all prompts): `./install.sh --non-interactive`.
 
 </details>
 
+### Windows (via WSL2)
+
+Lain runs on Windows through [WSL2](https://learn.microsoft.com/windows/wsl/install)
+— everything here is plain Linux (Next.js + Docker + Ollama), so there's
+nothing Windows-specific to port for the server or the CLI. Steps:
+
+1. Install WSL2 if you don't have it: `wsl --install` in an admin
+   PowerShell/Terminal, then pick a distro (Ubuntu is the default and
+   what's tested here).
+2. Install [Docker Desktop for Windows](https://docker.com/products/docker-desktop),
+   then in **Settings > Resources > WSL Integration** enable it for your
+   distro. This is the recommended way to get Docker in WSL — no `apt`
+   install needed, and Docker Desktop handles the daemon for you.
+3. Open your WSL distro's terminal and run through the **Quick start**
+   above (`git clone ... && cd lain && ./install.sh`) exactly as on Linux.
+   `install.sh` detects WSL automatically: it skips installing Docker
+   directly (since Docker Desktop already provides it) and points
+   `OLLAMA_HOST` at `host.docker.internal` instead of a LAN IP, so it
+   works whether Ollama runs inside WSL or as a
+   [native Windows app](https://ollama.com/download/windows) — both are
+   reachable from the container either way.
+4. The `lain`/`asuna` CLI commands work as-is in the WSL terminal (they're
+   plain bash). There's no Hyprland on Windows, so `setup-omarchy-cli.sh`
+   skips the global-hotkey/launcher-entry steps — for a similar
+   "hit a hotkey, get a popup terminal" experience, use
+   [AutoHotkey](https://www.autohotkey.com/) to bind a key to launching
+   Windows Terminal with `wsl bash -lc lain` (or `asuna`).
+
+GPU passthrough for Ollama works too, via
+[NVIDIA CUDA on WSL](https://docs.nvidia.com/cuda/wsl-user-guide/index.html)
+— `install.sh`'s GPU detection (`nvidia-smi`) picks this up the same as on
+native Linux.
+
 ## 1. One-time setup: Ollama
 
 Just make sure Ollama is running locally and has the model pulled:

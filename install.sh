@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
-# One-shot setup for a fresh Omarchy machine — installs/configures
-# everything Lain needs and brings her up, so a new user only has to run
-# this single script (plus create an OAuth app, which can't be automated).
+# One-shot setup for a fresh Omarchy machine (or Ubuntu/Debian, or Windows
+# via WSL2 — see README's "Windows (via WSL2)" section) — installs/
+# configures everything Lain needs and brings her up, so a new user only
+# has to run this single script (plus create an OAuth app, which can't be
+# automated).
 #
 # What it does, in order:
 #   1. Docker + docker-compose-plugin (installs via pacman if missing,
@@ -51,6 +53,9 @@ done
 
 log() { echo "==> $*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+is_wsl() {
+  grep -qiE "microsoft|wsl" /proc/version 2>/dev/null
+}
 
 confirm() {
   # confirm "prompt" — returns 0 (yes) by default, or always "yes" when
@@ -63,6 +68,17 @@ confirm() {
   [[ ! "$reply" =~ ^[Nn] ]]
 }
 
+confirm_default_no() {
+  # Same as confirm(), but defaults to "no" when non-interactive/no tty or
+  # left blank — for steps where silently proceeding would be surprising.
+  local prompt="$1" reply
+  if [[ "$non_interactive" == "true" || ! -t 0 ]]; then
+    return 1
+  fi
+  read -r -p "$prompt [y/N] " reply
+  [[ "$reply" =~ ^[Yy] ]]
+}
+
 echo
 echo "###############################################"
 echo "#  Lain — one-shot setup                     #"
@@ -73,7 +89,27 @@ echo
 # 1. Docker
 # -----------------------------------------------------------------------
 log "Checking Docker..."
+IS_WSL="false"
+is_wsl && IS_WSL="true"
+
+if [[ "$IS_WSL" == "true" ]]; then
+  log "Detected WSL — Windows' Docker Desktop with WSL integration enabled" \
+    "is the easiest way to get Docker here (no install needed inside WSL" \
+    "at all: enable it in Docker Desktop's Settings > Resources > WSL" \
+    "Integration for this distro, then re-run this script)."
+fi
+
 if ! have docker; then
+  if [[ "$IS_WSL" == "true" ]] && ! confirm_default_no \
+    "Docker isn't visible in WSL yet. Install Docker Desktop for Windows" \
+    "and enable WSL integration instead (recommended), or install Docker" \
+    "engine directly inside this WSL distro now?"; then
+    echo
+    echo "==> Install Docker Desktop for Windows (https://docker.com/products/docker-desktop),"
+    echo "    then in Docker Desktop go to Settings > Resources > WSL Integration and"
+    echo "    enable it for this distro. Re-run ./install.sh once that's done."
+    exit 0
+  fi
   if have pacman; then
     log "Installing docker + docker-compose-plugin via pacman..."
     sudo pacman -S --needed --noconfirm docker docker-compose-plugin
@@ -120,6 +156,17 @@ docker_running() {
 }
 
 if ! docker_running; then
+  if [[ "$IS_WSL" == "true" ]] && have docker && ! (command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1); then
+    # `docker` CLI exists but nothing responds and there's no systemd unit
+    # to start — almost always means Docker Desktop's WSL integration
+    # isn't enabled (or Docker Desktop isn't running) rather than a
+    # service that just needs starting.
+    echo "error: 'docker' is on PATH but not responding, and there's no" >&2
+    echo "  docker.service to start — this usually means Docker Desktop" >&2
+    echo "  isn't running, or its WSL integration isn't enabled for this" >&2
+    echo "  distro (Docker Desktop > Settings > Resources > WSL Integration)." >&2
+    exit 1
+  fi
   log "Docker isn't running — starting it..."
   if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1; then
     sudo systemctl enable --now docker
@@ -158,6 +205,12 @@ fi
 # 2. Ollama
 # -----------------------------------------------------------------------
 log "Checking Ollama..."
+if [[ "$IS_WSL" == "true" ]]; then
+  log "WSL note: Ollama can run either inside this WSL distro (installed" \
+    "below the same as on native Linux) or as a native Windows app — WSL2's" \
+    "localhost forwarding means 127.0.0.1:11434 reaches either one fine," \
+    "so no extra config is needed either way."
+fi
 OLLAMA_REACHABLE="false"
 curl -fsS -m 3 http://127.0.0.1:11434/api/tags >/dev/null 2>&1 && OLLAMA_REACHABLE="true"
 
@@ -245,10 +298,19 @@ if [[ ! -f .env ]]; then
   auth_secret="$(openssl rand -base64 32)"
   sed -i "s#^AUTH_SECRET=.*#AUTH_SECRET=${auth_secret}#" .env
   # Point OLLAMA_HOST/LAIN_TOOLS_URL at this machine's real LAN IP instead
-  # of the .env.example placeholder.
-  lan_ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -vE '^172\.(1[7-9]|2[0-9]|3[0-1])\.' | head -1)"
-  if [[ -n "$lan_ip" ]]; then
-    sed -i "s#^OLLAMA_HOST=.*#OLLAMA_HOST=http://${lan_ip}:11434#" .env
+  # of the .env.example placeholder — except under WSL + Docker Desktop,
+  # where `host.docker.internal` is the reliable way for a container to
+  # reach the Windows host (works whether Ollama runs inside WSL or as a
+  # native Windows app, thanks to WSL2's bidirectional localhost
+  # forwarding); a raw WSL vEth IP isn't guaranteed reachable from
+  # containers the same way a real LAN IP is.
+  if [[ "$IS_WSL" == "true" ]]; then
+    sed -i "s#^OLLAMA_HOST=.*#OLLAMA_HOST=http://host.docker.internal:11434#" .env
+  else
+    lan_ip="$(ip -4 -o addr show scope global 2>/dev/null | awk '{print $4}' | cut -d/ -f1 | grep -vE '^172\.(1[7-9]|2[0-9]|3[0-1])\.' | head -1)"
+    if [[ -n "$lan_ip" ]]; then
+      sed -i "s#^OLLAMA_HOST=.*#OLLAMA_HOST=http://${lan_ip}:11434#" .env
+    fi
   fi
   # On CPU-only machines, point OLLAMA_MODEL_DEEP at the same small model
   # as OLLAMA_MODEL instead of the .env.example default (a heavier 12b
