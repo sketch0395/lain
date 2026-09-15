@@ -107,7 +107,13 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "set_cyber_news_watch_terms to save standing 'what to look for' " +
   "instructions (e.g. 'ransomware, zero-days, CVEs affecting Linux') so " +
   "future get_cyber_news calls filter automatically without the user " +
-  "repeating themselves.";
+  "repeating themselves. IMPORTANT: every article returned by get_news or " +
+  "get_cyber_news includes a `link` field — whenever you mention or " +
+  "summarize a headline/article from either tool, always include its " +
+  "source name and direct URL right there (e.g. \"- Headline — Source: " +
+  "https://...\"), never just the bare title. The user often wants to " +
+  "share or verify these sources with others, so an uncited headline " +
+  "isn't useful to them.";
 
 const SHODAN_PROMPT_ADDENDUM =
   "\n\nYou also have Shodan.io tools: shodan_host_lookup (everything " +
