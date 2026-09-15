@@ -41,7 +41,17 @@ function extractImageColors(inputPath, { count = 12 } = {}) {
   try {
     out = execFileSync(
       "magick",
-      [resolved, "-resize", "200x200", "-colors", String(n), "+dither", "-depth", "8", "-format", "%c", "histogram:info:-"],
+      [
+        resolved,
+        "-background", "white",
+        "-alpha", "remove",
+        "-resize", "200x200",
+        "-colors", String(n),
+        "+dither",
+        "-depth", "8",
+        "-format", "%c",
+        "histogram:info:-",
+      ],
       { encoding: "utf8", timeout: 15000 }
     );
   } catch (err) {
@@ -71,6 +81,45 @@ function extractImageColors(inputPath, { count = 12 } = {}) {
 function luminance({ r, g, b }) {
   // Perceived brightness (ITU-R BT.601), 0 (black) - 255 (white).
   return 0.299 * r + 0.587 * g + 0.114 * b;
+}
+
+// WCAG relative luminance / contrast ratio — used to make sure the 8 named
+// colors (and the accent) are actually readable against whichever
+// background got picked, not just "close in hue" to a palette color that
+// might be nearly as pale/dark as the background itself.
+function srgbToLinear(c) {
+  const n = c / 255;
+  return n <= 0.04045 ? n / 12.92 : Math.pow((n + 0.055) / 1.055, 2.4);
+}
+
+function relativeLuminance({ r, g, b }) {
+  return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
+}
+
+function contrastRatio(hexA, hexB) {
+  const a = relativeLuminance(hexToRgb(hexA)) + 0.05;
+  const b = relativeLuminance(hexToRgb(hexB)) + 0.05;
+  return a > b ? a / b : b / a;
+}
+
+// Nudges a color's HSL lightness away from the background (darker in a
+// light-mode theme, lighter in a dark-mode one) until it clears
+// `targetRatio` against it, preserving hue/saturation as much as possible.
+// Caps out at l=0.08/0.92 so it can't wrap into pure black/white and lose
+// the color's identity entirely.
+function nudgeForContrast(hex, bgHex, mode, targetRatio) {
+  let { h, s } = rgbToHsl(hexToRgb(hex));
+  let { l } = rgbToHsl(hexToRgb(hex));
+  s = Math.max(s, 0.35);
+  let candidate = hex;
+  let steps = 0;
+  while (contrastRatio(candidate, bgHex) < targetRatio && steps < 20) {
+    l = mode === "dark" ? Math.min(0.92, l + 0.04) : Math.max(0.08, l - 0.04);
+    candidate = hslToHex(h, s, l);
+    steps++;
+    if (l <= 0.08 || l >= 0.92) break;
+  }
+  return candidate;
 }
 
 function rgbToHsl({ r, g, b }) {
@@ -175,20 +224,26 @@ function generateThemeColors(palette) {
     palette.reduce((sum, c) => sum + luminance(c) * c.count, 0) /
     palette.reduce((sum, c) => sum + c.count, 0);
   const mode = avgLuminance < 128 ? "dark" : "light";
+  const isDark = mode === "dark";
 
   const sortedByLuminance = [...top].sort((a, b) => luminance(a) - luminance(b));
   const darkest = sortedByLuminance[0];
   const lightest = sortedByLuminance[sortedByLuminance.length - 1];
   const background = mode === "dark" ? darkest : lightest;
-  const foreground = mode === "dark" ? lightest : darkest;
+  let foregroundHex = (mode === "dark" ? lightest : darkest).hex;
+  // The image's own extremes are usually plenty of contrast, but guard
+  // against a low-contrast source image (e.g. a flat, evenly-lit photo)
+  // leaving body text hard to read against the background.
+  foregroundHex = nudgeForContrast(foregroundHex, background.hex, mode, 7);
 
   const accentCandidates = top
-    .filter((c) => c.hex !== background.hex && c.hex !== foreground.hex && c.hsl.s > 0.25)
+    .filter((c) => c.hex !== background.hex && c.hex !== foregroundHex && c.hsl.s > 0.25)
     .sort((a, b) => b.hsl.s - a.hsl.s || b.count - a.count);
-  const accent = (accentCandidates[0] || top[Math.floor(top.length / 2)]).hex;
+  const accentBase = (accentCandidates[0] || top[Math.floor(top.length / 2)]).hex;
+  const accent = nudgeForContrast(accentBase, background.hex, mode, 3);
 
   const namedColors = {};
-  const excluded = new Set([background.hex, foreground.hex]);
+  const excluded = new Set([background.hex, foregroundHex]);
   for (const bucket of HUE_BUCKETS) {
     const saturated = withHsl.filter((c) => c.hsl.s > 0.2 && !excluded.has(c.hex));
     const pool = saturated.length ? saturated : withHsl.filter((c) => !excluded.has(c.hex));
@@ -198,26 +253,51 @@ function generateThemeColors(palette) {
     }, null);
     // Only trust a real palette match if it's reasonably close in hue;
     // otherwise synthesize a color at the target hue, tinted with the
-    // theme's own saturation/lightness so it stays coherent with the rest.
+    // theme's own saturation so it stays coherent with the rest.
     const accentHsl = rgbToHsl(hexToRgb(accent));
-    namedColors[bucket.name] =
+    const candidate =
       best && best.dist < 35 ? best.c.hex : hslToHex(bucket.hue, Math.max(0.4, accentHsl.s), 0.5);
+    // Whatever we picked, make sure it's actually legible as text/an icon
+    // color against the chosen background — a pale palette match on a pale
+    // background (or vice versa) is exactly what produces a "washed out,
+    // low contrast" theme.
+    namedColors[bucket.name] = nudgeForContrast(candidate, background.hex, mode, 4.5);
   }
 
-  const isDark = mode === "dark";
+  // "bright_" ANSI variants should read as more emphasized, not less — nudge
+  // further in the same safe direction (lighter in dark mode, darker in
+  // light mode) rather than always lightening, which would drag a
+  // light-mode color like light_yellow right back toward the background.
+  const brighten = (hex) => nudgeForContrast(hex, background.hex, mode, 6.5);
+
   return {
     mode,
     accent,
     selection: isDark ? lighten(background.hex, 0.15) : darken(background.hex, 0.1),
-    muted: isDark ? lighten(background.hex, 0.25) : darken(background.hex, 0.2),
+    muted: nudgeForContrast(
+      isDark ? lighten(background.hex, 0.25) : darken(background.hex, 0.2),
+      background.hex,
+      mode,
+      3
+    ),
     background: background.hex,
     dark_background: darken(background.hex, isDark ? 0.35 : 0.6),
     darker_background: darken(background.hex, isDark ? 0.55 : 0.75),
     lighter_background: lighten(background.hex, isDark ? 0.2 : 0.08),
-    foreground: foreground.hex,
-    dark_foreground: isDark ? darken(foreground.hex, 0.55) : lighten(foreground.hex, 0.3),
-    light_foreground: isDark ? darken(foreground.hex, 0.2) : lighten(foreground.hex, 0.1),
-    bright_foreground: isDark ? lighten(foreground.hex, 0.1) : "#FFFFFF",
+    foreground: foregroundHex,
+    dark_foreground: nudgeForContrast(
+      isDark ? darken(foregroundHex, 0.55) : lighten(foregroundHex, 0.3),
+      background.hex,
+      mode,
+      3
+    ),
+    light_foreground: nudgeForContrast(
+      isDark ? darken(foregroundHex, 0.2) : lighten(foregroundHex, 0.1),
+      background.hex,
+      mode,
+      4.5
+    ),
+    bright_foreground: isDark ? lighten(foregroundHex, 0.1) : "#000000",
     red: namedColors.red,
     yellow: namedColors.yellow,
     orange: namedColors.orange,
@@ -226,12 +306,12 @@ function generateThemeColors(palette) {
     blue: namedColors.blue,
     magenta: namedColors.magenta,
     brown: namedColors.brown,
-    bright_red: lighten(namedColors.red, 0.2),
-    bright_yellow: lighten(namedColors.yellow, 0.2),
-    bright_green: lighten(namedColors.green, 0.2),
-    bright_cyan: lighten(namedColors.cyan, 0.2),
-    bright_blue: lighten(namedColors.blue, 0.2),
-    bright_magenta: lighten(namedColors.magenta, 0.2),
+    bright_red: brighten(namedColors.red),
+    bright_yellow: brighten(namedColors.yellow),
+    bright_green: brighten(namedColors.green),
+    bright_cyan: brighten(namedColors.cyan),
+    bright_blue: brighten(namedColors.blue),
+    bright_magenta: brighten(namedColors.magenta),
   };
 }
 

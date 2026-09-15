@@ -155,17 +155,32 @@ function omarchyCommandBackground(argv) {
 // becomes a directory name directly under ~/.config/omarchy/themes/.
 const THEME_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9 ._-]{0,63}$/;
 
+// omarchy-theme-set derives the directory it looks for by lowercasing the
+// name it's given and turning spaces into dashes (see
+// /usr/share/omarchy/bin/omarchy-theme-set: `tr '[:upper:]' '[:lower:]' | tr
+// ' ' '-'`) — e.g. `omarchy theme set "Lain"` looks for a directory literally
+// named "lain", not "Lain". If we created the theme directory using whatever
+// case/spacing the user or model happened to type, applying it later would
+// fail with "Theme '...' does not exist" on a case-sensitive filesystem even
+// though the directory is right there. Normalizing the directory name up
+// front (at creation time) keeps it consistent with what every future
+// `omarchy theme set <name>` invocation will actually go looking for.
+function normalizeThemeName(name) {
+  return String(name).trim().toLowerCase().replace(/\s+/g, "-");
+}
+
 function omarchyThemeDir(name) {
   if (!THEME_NAME_RE.test(name)) {
     throw new Error(
       "Invalid theme name — use letters, numbers, spaces, '.', '_', '-' only (no slashes)."
     );
   }
-  const dir = path.resolve(OMARCHY_THEMES_DIR, name);
+  const normalized = normalizeThemeName(name);
+  const dir = path.resolve(OMARCHY_THEMES_DIR, normalized);
   if (path.dirname(dir) !== OMARCHY_THEMES_DIR) {
     throw new Error("Invalid theme name.");
   }
-  return dir;
+  return { dir, name: normalized };
 }
 
 // Creates (or overlays onto) a custom theme under ~/.config/omarchy/themes/
@@ -180,7 +195,7 @@ function omarchyThemeDir(name) {
 // same validated omarchySetTheme path.
 async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, backgroundPath, apply }) {
   if (!name) throw new Error("name is required");
-  const dir = omarchyThemeDir(name);
+  const { dir, name: normalizedName } = omarchyThemeDir(name);
   fs.mkdirSync(dir, { recursive: true });
 
   const written = [];
@@ -219,11 +234,11 @@ async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, backgroundP
 
   let applied = false;
   if (apply) {
-    execFileSync("omarchy-theme-set", [name], { timeout: 10000 });
+    execFileSync("omarchy-theme-set", [normalizedName], { timeout: 10000 });
     applied = true;
   }
 
-  return { theme: name, dir, written, applied };
+  return { theme: normalizedName, dir, written, applied };
 }
 
 // One-shot "make a theme out of this picture": extracts a dominant-color
