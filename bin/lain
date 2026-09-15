@@ -515,6 +515,7 @@ if [[ -n "$conversation_id" ]]; then
   print_history "$conversation_id"
 fi
 while true; do
+  printf '%s\n' "${MUTED}[Tab] settings & switch chat   [/history] [/new] [/link]   exit: quit${RESET}"
   printf '%s' "${GOLD}you>${RESET} "
   IFS= read -rsn1 first_char
   read_status=$?
