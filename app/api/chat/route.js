@@ -187,14 +187,29 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "and returns immediately with a log file path), and create_omarchy_theme " +
   "(builds a brand-new custom theme under the user's own config: give it " +
   "a name and a colors.toml body — see Omarchy's theming docs/an existing " +
-  "theme's colors.toml for the expected keys/format — optionally a " +
-  "background image URL to download, and whether to apply it right away). " +
-  "Never edit or run anything under /usr/share/omarchy/ (that's the " +
+  "theme's colors.toml for the expected keys/format — a background image " +
+  "either as background_path, a local file the user already saved, e.g. " +
+  "~/Downloads/photo.jpg (no hosting needed — it's just copied in), or " +
+  "background_url to download one from the web instead — and whether to " +
+  "apply it right away). " +
+  "\n\nFor building a theme straight out of a picture's own colors (as " +
+  "opposed to colors you compose by hand), you also have " +
+  "extract_image_colors (read-only — previews the dominant hex colors in a " +
+  "local image file, sorted by how much of the image each one covers) and " +
+  "create_omarchy_theme_from_image (the one-step version: give it a name " +
+  "and a local image path — again, no public URL needed, just wherever the " +
+  "user saved it — and it extracts the palette, auto-builds a full " +
+  "colors.toml with a sensible light/dark mode and accent from the image " +
+  "itself, creates the theme with that same image as its background, and " +
+  "optionally applies it). Prefer this whenever the user says something " +
+  "like 'make a theme out of this picture' rather than asking them to hand " +
+  "you exact colors." +
+  "\n\nNever edit or run anything under /usr/share/omarchy/ (that's the " +
   "read-only, packaged copy) — only the user's own ~/.config/omarchy/ is " +
   "ever touched by these tools. All of these (except the read-only " +
-  "list_omarchy_commands) require the user's explicit confirmation before " +
-  "running, so it's safe to propose bold changes — just be clear and " +
-  "specific about exactly what will happen.";
+  "list_omarchy_commands/extract_image_colors) require the user's explicit " +
+  "confirmation before running, so it's safe to propose bold changes — " +
+  "just be clear and specific about exactly what will happen.";
 
 function currentTimeAddendum() {
   const now = new Date();

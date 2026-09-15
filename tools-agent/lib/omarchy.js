@@ -6,6 +6,7 @@ const path = require("node:path");
 const { execFileSync, spawn } = require("node:child_process");
 const { OMARCHY_STATE_DIR } = require("./config");
 const { send, readJsonBody } = require("./http");
+const { resolveImagePath, themeFromImage, extractImageColors } = require("./imageColors");
 
 function hyprctlJson(args) {
   try {
@@ -169,11 +170,15 @@ function omarchyThemeDir(name) {
 
 // Creates (or overlays onto) a custom theme under ~/.config/omarchy/themes/
 // per theming.md: a directory containing at minimum a colors.toml, plus
-// optionally a downloaded background image. Never touches
-// /usr/share/omarchy/ (stock themes) — this only ever writes into the
-// user's own config dir. If `apply` is set, switches to the new theme
-// immediately afterward via the same validated omarchySetTheme path.
-async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, apply }) {
+// optionally a background image — either downloaded from a public URL
+// (backgroundUrl) or copied straight from a local file already on this
+// machine (backgroundPath, e.g. something the user saved to ~/Downloads —
+// no hosting required, it's read through the same allowed-roots sandbox as
+// every other file-path tool). Never touches /usr/share/omarchy/ (stock
+// themes) — this only ever writes into the user's own config dir. If
+// `apply` is set, switches to the new theme immediately afterward via the
+// same validated omarchySetTheme path.
+async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, backgroundPath, apply }) {
   if (!name) throw new Error("name is required");
   const dir = omarchyThemeDir(name);
   fs.mkdirSync(dir, { recursive: true });
@@ -185,7 +190,15 @@ async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, apply }) {
     written.push("colors.toml");
   }
 
-  if (backgroundUrl) {
+  if (backgroundPath) {
+    const resolved = resolveImagePath(backgroundPath);
+    const bgDir = path.join(dir, "backgrounds");
+    fs.mkdirSync(bgDir, { recursive: true });
+    const ext = path.extname(resolved) || ".jpg";
+    const bgPath = path.join(bgDir, `background${ext}`);
+    fs.copyFileSync(resolved, bgPath);
+    written.push(`backgrounds/background${ext}`);
+  } else if (backgroundUrl) {
     const bgDir = path.join(dir, "backgrounds");
     fs.mkdirSync(bgDir, { recursive: true });
     const res = await fetch(backgroundUrl, { signal: AbortSignal.timeout(15000) });
@@ -211,6 +224,23 @@ async function omarchyCreateTheme({ name, colorsToml, backgroundUrl, apply }) {
   }
 
   return { theme: name, dir, written, applied };
+}
+
+// One-shot "make a theme out of this picture": extracts a dominant-color
+// palette from a local image file (no public URL needed), auto-generates a
+// full colors.toml from it, creates the theme with that same image as its
+// background, and optionally applies it immediately.
+async function omarchyCreateThemeFromImage({ name, imagePath, apply, count }) {
+  if (!name) throw new Error("name is required");
+  if (!imagePath) throw new Error("imagePath is required");
+  const generated = themeFromImage(imagePath, { count });
+  const result = await omarchyCreateTheme({
+    name,
+    colorsToml: generated.colorsToml,
+    backgroundPath: generated.imagePath,
+    apply,
+  });
+  return { ...result, colors: generated.colors, palette: generated.palette };
 }
 
 function registerRoutes(router) {
@@ -248,6 +278,27 @@ function registerRoutes(router) {
     }
   });
 
+  router.post("/omarchy/image/colors", async (req, res) => {
+    const { path: imagePath, count } = await readJsonBody(req);
+    if (!imagePath) return send(res, 400, { error: "path is required" });
+    try {
+      send(res, 200, extractImageColors(imagePath, { count }));
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
+
+  router.post("/omarchy/theme/from-image", async (req, res) => {
+    const body = await readJsonBody(req);
+    if (!body.name) return send(res, 400, { error: "name is required" });
+    if (!body.imagePath) return send(res, 400, { error: "imagePath is required" });
+    try {
+      send(res, 200, await omarchyCreateThemeFromImage(body));
+    } catch (err) {
+      send(res, 500, { error: err.message });
+    }
+  });
+
   router.post("/omarchy/command", async (req, res) => {
     const { argv } = await readJsonBody(req);
     try {
@@ -276,6 +327,7 @@ module.exports = {
   omarchyCommand,
   omarchyCommandBackground,
   omarchyCreateTheme,
+  omarchyCreateThemeFromImage,
   registerRoutes,
 };
 
