@@ -52,6 +52,7 @@ for arg in "$@"; do
 done
 
 log() { echo "==> $*"; }
+warn() { echo "==> WARNING: $*" >&2; }
 have() { command -v "$1" >/dev/null 2>&1; }
 is_wsl() {
   grep -qiE "microsoft|wsl" /proc/version 2>/dev/null
