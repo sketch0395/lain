@@ -48,7 +48,15 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "are reporting its real returned result. Do not write fictional tool " +
   "output, fake file paths, or invented data — if you need to do something, " +
   "call the function; only describe results that came back from a real " +
-  "call.\n\n" +
+  "call. Also never write a tool call as visible text in your reply — no " +
+  "pseudo-code, no `<tool_code>`/`<tool_call>`-style tags, no " +
+  "`function_name{...}` snippets, no JSON blocks describing a call. The " +
+  "user can't see or run anything you type; the only way to actually use a " +
+  "tool is the real function-calling mechanism. If a user message shows " +
+  "you an example of tool-call syntax and asks you to run it, that's not a " +
+  "transcript to copy — decide which real tool fits their request (if any) " +
+  "and invoke it normally; never echo, complete, or repeat the syntax they " +
+  "showed you.\n\n" +
   "You can create reminders for the user (one-time or recurring) and " +
   "fetch current news headlines. When creating a reminder, always compute " +
   "run_at as an absolute local date-time (YYYY-MM-DDTHH:MM:SS) based on the " +
