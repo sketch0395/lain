@@ -7,6 +7,7 @@ import AboutMePanel from "./AboutMePanel";
 import MemoriesPanel from "./MemoriesPanel";
 import WipeMemoryModal from "./WipeMemoryModal";
 import GrantCapturePermissionModal from "./GrantCapturePermissionModal";
+import MarkdownMessage from "./MarkdownMessage";
 
 export default function ChatClient({ userLabel, userImage, signOutAction }) {
   const [conversations, setConversations] = useState([]);
@@ -798,15 +799,19 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             ) : (
               <div
                 key={i}
-                className={`max-w-[85%] sm:max-w-[70%] px-4 py-2 rounded-2xl whitespace-pre-wrap break-words ${
+                className={`max-w-[85%] sm:max-w-[70%] px-4 py-2 rounded-2xl break-words ${
                   m.role === "user"
-                    ? "self-end ml-auto bg-gradient-to-br from-[var(--lain-accent)]/50 to-[var(--lain-accent-dark)]/50 text-[var(--lain-text)] border border-[var(--lain-highlight)]/30"
+                    ? "self-end ml-auto whitespace-pre-wrap bg-gradient-to-br from-[var(--lain-accent)]/50 to-[var(--lain-accent-dark)]/50 text-[var(--lain-text)] border border-[var(--lain-highlight)]/30"
                     : m.error
                     ? "bg-[var(--lain-panel-alt)]/50 border border-red-500/40"
                     : "bg-[var(--lain-panel-alt)]/50 border border-[var(--lain-border)]"
                 }`}
               >
-                <p>{m.content}</p>
+                {m.role === "user" ? (
+                  <p>{m.content}</p>
+                ) : (
+                  <MarkdownMessage content={m.content} />
+                )}
                 {m.error && (
                   <button
                     type="button"
