@@ -77,18 +77,70 @@ if ! have docker; then
   if have pacman; then
     log "Installing docker + docker-compose-plugin via pacman..."
     sudo pacman -S --needed --noconfirm docker docker-compose-plugin
+  elif have apt-get; then
+    log "Installing docker + docker-compose-plugin via apt..."
+    sudo apt-get update
+    sudo apt-get install -y ca-certificates curl
+    # Prefer the distro's own docker.io/docker-compose-v2 packages (Ubuntu
+    # 24.04+ ships a recent enough Docker); fall back to Docker's official
+    # apt repo if those aren't available (e.g. older Ubuntu releases).
+    if sudo apt-get install -y docker.io docker-compose-v2 2>/dev/null; then
+      :
+    else
+      log "distro docker packages unavailable — adding Docker's official apt repo..."
+      sudo install -m 0755 -d /etc/apt/keyrings
+      . /etc/os-release
+      sudo curl -fsSL "https://download.docker.com/linux/${ID}/gpg" -o /etc/apt/keyrings/docker.asc
+      sudo chmod a+r /etc/apt/keyrings/docker.asc
+      echo \
+        "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${ID} ${VERSION_CODENAME} stable" |
+        sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+      sudo apt-get update
+      sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-compose-plugin
+    fi
   else
-    echo "error: docker not found and pacman isn't available — install Docker" >&2
-    echo "  manually (https://docs.docker.com/engine/install/), then re-run." >&2
+    echo "error: docker not found and neither pacman nor apt-get is available —" >&2
+    echo "  install Docker manually (https://docs.docker.com/engine/install/)," >&2
+    echo "  then re-run." >&2
     exit 1
   fi
 else
   log "Docker already installed."
 fi
 
-if ! systemctl is-active --quiet docker; then
-  log "Enabling and starting the docker service..."
-  sudo systemctl enable --now docker
+docker_running() {
+  # systemctl covers most distros (Arch/Omarchy, Ubuntu, Debian, Fedora...);
+  # fall back to `docker info` for non-systemd setups (e.g. Docker Desktop,
+  # WSL without systemd) where there's no docker.service to query.
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1; then
+    systemctl is-active --quiet docker
+  else
+    docker info >/dev/null 2>&1
+  fi
+}
+
+if ! docker_running; then
+  log "Docker isn't running — starting it..."
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1; then
+    sudo systemctl enable --now docker
+  elif command -v service >/dev/null 2>&1; then
+    sudo service docker start
+  else
+    echo "error: couldn't find a way to start Docker on this system — start" >&2
+    echo "  it manually, then re-run." >&2
+    exit 1
+  fi
+  # Give the daemon a moment to come up before anything tries to use it.
+  for _ in $(seq 1 10); do
+    docker_running && break
+    sleep 1
+  done
+  if ! docker_running; then
+    echo "error: Docker still isn't responding after starting it — check" >&2
+    echo "  'sudo systemctl status docker' (or your distro's equivalent)." >&2
+    exit 1
+  fi
+  log "Docker is now running."
 else
   log "Docker service already running."
 fi

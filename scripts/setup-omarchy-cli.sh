@@ -57,7 +57,7 @@ else
        "skipped since they depend on Omarchy's config layout."
 fi
 
-command -v jq >/dev/null || { echo "jq is required (pacman -S jq)" >&2; exit 1; }
+command -v jq >/dev/null || { echo "jq is required (pacman -S jq, or apt install jq on Debian/Ubuntu)" >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 [[ -f "$BIN_SRC" ]] || { echo "Can't find $BIN_SRC — run this from the repo." >&2; exit 1; }
 

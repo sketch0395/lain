@@ -11,6 +11,48 @@ if [[ ! -f .env ]]; then
   exit 1
 fi
 
+# --- Docker daemon check ------------------------------------------------
+# deploy.sh can be run standalone (without install.sh), e.g. if Docker was
+# already installed manually but isn't currently running — make sure it's
+# up before handing off to `docker compose`, instead of failing with a
+# confusing "Cannot connect to the Docker daemon" error.
+docker_running() {
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1; then
+    systemctl is-active --quiet docker
+  else
+    docker info >/dev/null 2>&1
+  fi
+}
+
+if ! command -v docker >/dev/null 2>&1; then
+  echo "error: docker not found — install it first (see install.sh or" >&2
+  echo "  https://docs.docker.com/engine/install/), then re-run." >&2
+  exit 1
+fi
+
+if ! docker_running; then
+  echo "==> Docker isn't running — starting it..."
+  if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1; then
+    sudo systemctl start docker
+  elif command -v service >/dev/null 2>&1; then
+    sudo service docker start
+  else
+    echo "error: couldn't find a way to start Docker on this system — start" >&2
+    echo "  it manually, then re-run." >&2
+    exit 1
+  fi
+  for _ in $(seq 1 10); do
+    docker_running && break
+    sleep 1
+  done
+  if ! docker_running; then
+    echo "error: Docker still isn't responding after starting it — check" >&2
+    echo "  'sudo systemctl status docker' (or your distro's equivalent)." >&2
+    exit 1
+  fi
+  echo "==> Docker is now running."
+fi
+
 # --- Tools agent (diagnostics/files/Omarchy access) -------------------------
 # Offers to set this up on a fresh install so Lain's tool features actually
 # work out of the box, instead of silently staying disabled because nobody

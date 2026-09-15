@@ -70,21 +70,35 @@ command -v exiftool >/dev/null 2>&1 || missing_pkgs+=("perl-image-exiftool")
 
 if [[ ${#missing_pkgs[@]} -gt 0 ]]; then
   echo "==> Optional forensics dependencies missing: ${missing_pkgs[*]}"
-  if command -v pacman >/dev/null 2>&1; then
+  if command -v pacman >/dev/null 2>&1 || command -v apt-get >/dev/null 2>&1; then
     if [[ -t 0 ]]; then
-      read -r -p "Install with pacman now? [Y/n] " reply
+      read -r -p "Install now? [Y/n] " reply
     else
       reply="n"
     fi
     if [[ ! "$reply" =~ ^[Nn] ]]; then
-      sudo pacman -S --needed --noconfirm "${missing_pkgs[@]}" \
-        && echo "  - installed: ${missing_pkgs[*]}" \
-        || echo "  - install failed — analyze_pcap/EXIF will be unavailable until installed manually." >&2
+      if command -v pacman >/dev/null 2>&1; then
+        sudo pacman -S --needed --noconfirm "${missing_pkgs[@]}" \
+          && echo "  - installed: ${missing_pkgs[*]}" \
+          || echo "  - install failed — analyze_pcap/EXIF will be unavailable until installed manually." >&2
+      else
+        # Debian/Ubuntu package names differ from Arch's.
+        apt_pkgs=()
+        for p in "${missing_pkgs[@]}"; do
+          case "$p" in
+            perl-image-exiftool) apt_pkgs+=("libimage-exiftool-perl") ;;
+            *) apt_pkgs+=("$p") ;;
+          esac
+        done
+        sudo apt-get update && sudo apt-get install -y "${apt_pkgs[@]}" \
+          && echo "  - installed: ${apt_pkgs[*]}" \
+          || echo "  - install failed — analyze_pcap/EXIF will be unavailable until installed manually." >&2
+      fi
     else
-      echo "  - skipping — install later with: sudo pacman -S --needed ${missing_pkgs[*]}"
+      echo "  - skipping — install later manually (tcpdump / exiftool)."
     fi
   else
-    echo "  - pacman not found (non-Arch system) — install the equivalent" >&2
+    echo "  - neither pacman nor apt-get found — install the equivalent" >&2
     echo "    packages for tcpdump/exiftool manually if you want analyze_pcap" >&2
     echo "    and image EXIF data to work." >&2
   fi
