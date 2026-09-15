@@ -138,7 +138,8 @@ if [[ "$list_mode" == "true" ]]; then
   exit 0
 fi
 
-if [[ "$pick_mode" == "true" ]]; then
+pick_conversation() {
+  local response http_code body
   response=$(curl -sS -w '\n%{http_code}' \
     -H "Authorization: Bearer $LAIN_API_TOKEN" \
     "$LAIN_URL/api/conversations")
@@ -146,12 +147,13 @@ if [[ "$pick_mode" == "true" ]]; then
   body="${response%$'\n'*}"
   if [[ "$http_code" != "200" ]]; then
     echo "${CRIMSON}⚠ Lain error ($http_code):${RESET} $body" >&2
-    exit 1
+    return 1
   fi
 
   # Build "id<TAB>label" lines, most-recently-active conversation first
   # (the server already orders by last activity).
-  menu_lines=("__new__"$'\t'"➕ New conversation")
+  local menu_lines=("__new__"$'\t'"➕ New conversation")
+  local id title ts ts_int when
   while IFS=$'\t' read -r id title ts; do
     [[ -z "$id" ]] && continue
     ts_int="${ts%%.*}"
@@ -159,28 +161,34 @@ if [[ "$pick_mode" == "true" ]]; then
     menu_lines+=("$id"$'\t'"${title:-(untitled)}  ${MUTED}· $when${RESET}")
   done < <(jq -r '.[] | "\(.id)\t\(.title // "")\t\(.last_active // .created_at)"' <<<"$body")
 
+  local selected
   if command -v fzf >/dev/null; then
     selected="$(printf '%s\n' "${menu_lines[@]}" | fzf --ansi --delimiter=$'\t' --with-nth=2 \
       --prompt="Continue which chat? " --height=~60% --reverse \
       --header="Enter: open   Esc: cancel")"
   else
     echo "Recent conversations:" >&2
-    i=0
+    local i=0 line
     for line in "${menu_lines[@]}"; do
       echo "  [$i] ${line#*$'\t'}" >&2
       i=$((i + 1))
     done
+    local idx
     read -rp "Pick a number (default 0): " idx
     idx="${idx:-0}"
     selected="${menu_lines[$idx]:-${menu_lines[0]}}"
   fi
 
-  if [[ -z "$selected" ]]; then
+  [[ -z "$selected" ]] && return 1
+  echo "${selected%%$'\t'*}"
+}
+
+if [[ "$pick_mode" == "true" ]]; then
+  picked_id="$(pick_conversation)" || {
     echo "${MUTED}↳ Cancelled.${RESET}" >&2
     exit 0
-  fi
+  }
 
-  picked_id="${selected%%$'\t'*}"
   if [[ "$picked_id" == "__new__" ]]; then
     rm -f "$STATE_FILE"
     echo "${MUTED}↳ Starting a new conversation${RESET}" >&2
@@ -397,7 +405,7 @@ print_history() {
 # Interactive settings menu (opened by pressing Tab at an empty prompt).
 # Renders a small boxed menu; ↑/↓ or Tab move the selection, Enter
 # toggles/selects, Esc or 'q' closes it and returns to the prompt.
-SETTINGS_MENU_ROWS=3
+SETTINGS_MENU_ROWS=5
 draw_settings_menu() {
   local sel="$1"
   local p_label d_label
@@ -406,11 +414,13 @@ draw_settings_menu() {
   local -a items=(
     "Personality        [$p_label]"
     "Deep-thinking mode  [$d_label]"
+    "Switch conversation…"
+    "New conversation"
     "Close menu"
   )
   echo "${MUTED}┌─ Settings  (↑/↓ or Tab move · Enter select · Esc close) ─${RESET}"
   local i
-  for i in 0 1 2; do
+  for i in 0 1 2 3 4; do
     if [[ "$i" == "$sel" ]]; then
       echo "${GOLD}➤ ${items[$i]}${RESET}"
     else
@@ -454,7 +464,33 @@ open_settings_menu() {
         case "$sel" in
           0) [[ "$personality" == "true" ]] && personality="false" || personality="true" ;;
           1) [[ "$deep_thinking" == "true" ]] && deep_thinking="false" || deep_thinking="true" ;;
-          2) break ;;
+          2)
+            echo
+            local picked
+            picked="$(pick_conversation)" || picked=""
+            if [[ -n "$picked" ]]; then
+              if [[ "$picked" == "__new__" ]]; then
+                rm -f "$STATE_FILE"
+                conversation_id=""
+                echo "${MUTED}↳ Starting a new conversation${RESET}"
+              else
+                conversation_id="$picked"
+                echo -n "$picked" > "$STATE_FILE"
+                echo "${MUTED}↳ Resuming conversation ${picked}${RESET}"
+                conversation_link
+                print_history "$conversation_id"
+              fi
+            fi
+            return
+            ;;
+          3)
+            rm -f "$STATE_FILE"
+            conversation_id=""
+            echo
+            echo "${MUTED}Started a new conversation.${RESET}"
+            return
+            ;;
+          4) break ;;
         esac
         ;;
       q|Q) break ;;
