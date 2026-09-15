@@ -168,6 +168,31 @@ else
   log "Ollama already installed/reachable."
 fi
 
+# --- GPU detection -----------------------------------------------------
+# Ollama auto-detects and uses a GPU when one is present/working, and
+# falls back to CPU on its own — no explicit config is needed either way.
+# But CPU-only inference is *much* slower, especially for the larger
+# deep-thinking model, so warn the user and avoid pulling/wiring up a
+# model that'll be painfully slow on this machine.
+log "Checking for a GPU..."
+HAS_GPU="false"
+GPU_KIND=""
+if have nvidia-smi && nvidia-smi -L >/dev/null 2>&1; then
+  HAS_GPU="true"
+  GPU_KIND="NVIDIA"
+elif [[ -e /dev/kfd ]] || (have rocminfo && rocminfo >/dev/null 2>&1); then
+  HAS_GPU="true"
+  GPU_KIND="AMD/ROCm"
+fi
+
+if [[ "$HAS_GPU" == "true" ]]; then
+  log "GPU detected ($GPU_KIND) — Ollama will use it automatically."
+else
+  warn "No GPU detected — Ollama will run models on CPU, which is much" \
+       "slower (especially for a 12b-class model). Using the smaller" \
+       "model for both normal and deep-thinking mode instead."
+fi
+
 # The Lain container needs to reach Ollama via this machine's LAN IP, not
 # localhost — if the ollama.service unit exists and isn't already
 # listening on all interfaces, add a drop-in override for that.
@@ -185,8 +210,19 @@ EOF
   fi
 fi
 
+# On CPU-only machines, skip the heavier deep-thinking model — use the
+# small model for both normal and deep-thinking mode so deep-thinking
+# stays usable instead of grinding to a halt.
+if [[ "$HAS_GPU" == "true" ]]; then
+  MODELS_TO_PULL=(gemma4:e4b gemma4:12b)
+  DEEP_MODEL="gemma4:12b"
+else
+  MODELS_TO_PULL=(gemma4:e4b)
+  DEEP_MODEL="gemma4:e4b"
+fi
+
 if have ollama; then
-  for model in gemma4:e4b gemma4:12b; do
+  for model in "${MODELS_TO_PULL[@]}"; do
     if ! ollama list 2>/dev/null | grep -q "^${model}"; then
       log "Pulling model $model (this can take a while)..."
       ollama pull "$model"
@@ -196,7 +232,7 @@ if have ollama; then
   done
 else
   log "ollama CLI not found locally but the API is reachable — make sure" \
-    "gemma4:e4b and gemma4:12b are pulled on whatever host is serving it."
+    "${MODELS_TO_PULL[*]} are pulled on whatever host is serving it."
 fi
 
 # -----------------------------------------------------------------------
@@ -214,6 +250,10 @@ if [[ ! -f .env ]]; then
   if [[ -n "$lan_ip" ]]; then
     sed -i "s#^OLLAMA_HOST=.*#OLLAMA_HOST=http://${lan_ip}:11434#" .env
   fi
+  # On CPU-only machines, point OLLAMA_MODEL_DEEP at the same small model
+  # as OLLAMA_MODEL instead of the .env.example default (a heavier 12b
+  # model) — see the GPU detection above.
+  sed -i "s#^OLLAMA_MODEL_DEEP=.*#OLLAMA_MODEL_DEEP=${DEEP_MODEL}#" .env
 
   echo
   echo "⚠️  Created .env with a generated AUTH_SECRET, but you still need to:"
