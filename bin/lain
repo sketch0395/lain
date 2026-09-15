@@ -394,6 +394,76 @@ print_history() {
   echo "${MUTED}── (resumed above) ──────────────────${RESET}"
 }
 
+# Interactive settings menu (opened by pressing Tab at an empty prompt).
+# Renders a small boxed menu; ↑/↓ or Tab move the selection, Enter
+# toggles/selects, Esc or 'q' closes it and returns to the prompt.
+SETTINGS_MENU_ROWS=3
+draw_settings_menu() {
+  local sel="$1"
+  local p_label d_label
+  p_label="$([[ "$personality" == "true" ]] && echo "ON " || echo "OFF")"
+  d_label="$([[ "$deep_thinking" == "true" ]] && echo "ON " || echo "OFF")"
+  local -a items=(
+    "Personality        [$p_label]"
+    "Deep-thinking mode  [$d_label]"
+    "Close menu"
+  )
+  echo "${MUTED}┌─ Settings  (↑/↓ or Tab move · Enter select · Esc close) ─${RESET}"
+  local i
+  for i in 0 1 2; do
+    if [[ "$i" == "$sel" ]]; then
+      echo "${GOLD}➤ ${items[$i]}${RESET}"
+    else
+      echo "  ${items[$i]}"
+    fi
+  done
+  echo "${MUTED}└────────────────────────────────────────────────────────${RESET}"
+}
+
+open_settings_menu() {
+  local sel=0
+  local redraw="false"
+  while true; do
+    if [[ "$redraw" == "true" ]]; then
+      # Move cursor back up over the previously drawn menu and clear it.
+      printf '\033[%dA\033[J' "$((SETTINGS_MENU_ROWS + 2))"
+    fi
+    draw_settings_menu "$sel"
+    redraw="true"
+
+    local key
+    IFS= read -rsn1 key || break
+    case "$key" in
+      $'\x1b')
+        local k2 k3
+        IFS= read -rsn1 -t 0.05 k2 2>/dev/null || true
+        if [[ "$k2" == "[" ]]; then
+          IFS= read -rsn1 -t 0.05 k3 2>/dev/null || true
+          case "$k3" in
+            A) sel=$(( (sel - 1 + SETTINGS_MENU_ROWS) % SETTINGS_MENU_ROWS )) ;;
+            B) sel=$(( (sel + 1) % SETTINGS_MENU_ROWS )) ;;
+          esac
+        else
+          break
+        fi
+        ;;
+      $'\t')
+        sel=$(( (sel + 1) % SETTINGS_MENU_ROWS ))
+        ;;
+      ""|$'\n'|$'\r')
+        case "$sel" in
+          0) [[ "$personality" == "true" ]] && personality="false" || personality="true" ;;
+          1) [[ "$deep_thinking" == "true" ]] && deep_thinking="false" || deep_thinking="true" ;;
+          2) break ;;
+        esac
+        ;;
+      q|Q) break ;;
+    esac
+  done
+  printf '\033[%dA\033[J' "$((SETTINGS_MENU_ROWS + 2))"
+  echo "${MUTED}personality=${personality}  deep_thinking=${deep_thinking}${RESET}"
+}
+
 if [[ -n "$message" ]]; then
   reply="$(send_message "$message")"
   [[ -f "$STATE_FILE" ]] && conversation_id="$(cat "$STATE_FILE")"
@@ -403,16 +473,34 @@ if [[ -n "$message" ]]; then
 fi
 
 # No message given — interactive REPL.
-echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL, '/history' to reprint past messages, '/personality' or '/deep' to toggle modes, '/status' to see current settings)${RESET}"
+echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL, '/history' to reprint past messages, Tab for the settings menu, '/status' to see current settings)${RESET}"
 if [[ -n "$conversation_id" ]]; then
   conversation_link
   print_history "$conversation_id"
 fi
 while true; do
   printf '%s' "${GOLD}you>${RESET} "
-  if ! IFS= read -r line; then
+  IFS= read -rsn1 first_char
+  read_status=$?
+  if [[ $read_status -ne 0 ]]; then
     echo
     break
+  fi
+  if [[ "$first_char" == $'\t' ]]; then
+    echo
+    open_settings_menu
+    continue
+  fi
+  if [[ -z "$first_char" ]]; then
+    echo
+    line=""
+  else
+    printf '%s' "$first_char"
+    if ! IFS= read -r rest; then
+      echo
+      break
+    fi
+    line="$first_char$rest"
   fi
   [[ -z "$line" ]] && continue
   case "$line" in
