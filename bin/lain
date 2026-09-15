@@ -10,6 +10,7 @@
 #   lain                    Open an interactive chat REPL.
 #   lain --new "message"    Start a fresh conversation (new memory thread).
 #   lain --plain "message"  Ask without her personality (neutral mode).
+#   lain --deep "message"   Ask using the deep-thinking (larger/slower) model.
 #   lain --list             List recent conversations (id + title).
 #   lain --pick             Interactively pick a recent conversation to
 #                            continue (fzf if installed, numbered menu
@@ -25,6 +26,12 @@
 # Every reply includes a "Continue in browser" link (also available via
 # '/link' in the REPL) that deep-links straight into that same conversation
 # in the web UI.
+#
+# REPL-only toggle commands (take effect for the rest of the session):
+#   /personality   Toggle her personality on/off (on by default).
+#   /deep          Toggle deep-thinking mode on/off (bigger/slower model).
+#   /status        Show current personality/deep-thinking mode.
+#   /history       Reprint this conversation's past messages.
 #
 # If the tools agent is configured (see scripts/setup-tools-agent.sh),
 # Lain may ask to check diagnostics or files on your laptop — you'll be
@@ -64,6 +71,7 @@ MUTED=$'\e[38;2;181;160;143m'
 RESET=$'\e[0m'
 
 personality="true"
+deep_thinking="false"
 new_conversation="false"
 continue_arg=""
 rename_arg=""
@@ -94,6 +102,7 @@ for arg in "$@"; do
   fi
   case "$arg" in
     --plain) personality="false" ;;
+    --deep) deep_thinking="true" ;;
     --new) new_conversation="true" ;;
     --list) list_mode="true" ;;
     --pick) pick_mode="true" ;;
@@ -280,7 +289,8 @@ send_message() {
     --arg message "$text" \
     --arg conversationId "$conversation_id" \
     --argjson personality "$personality" \
-    '{message: $message, personality: $personality} + (if $conversationId == "" then {} else {conversationId: $conversationId} end)')
+    --argjson deepThinking "$deep_thinking" \
+    '{message: $message, personality: $personality, deepThinking: $deepThinking} + (if $conversationId == "" then {} else {conversationId: $conversationId} end)')
 
   local response
   response=$(curl -sS -w '\n%{http_code}' \
@@ -393,7 +403,7 @@ if [[ -n "$message" ]]; then
 fi
 
 # No message given — interactive REPL.
-echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL, '/history' to reprint past messages)${RESET}"
+echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL, '/history' to reprint past messages, '/personality' or '/deep' to toggle modes, '/status' to see current settings)${RESET}"
 if [[ -n "$conversation_id" ]]; then
   conversation_link
   print_history "$conversation_id"
@@ -427,6 +437,30 @@ while true; do
       else
         echo "${MUTED}No conversation started yet — send a message first.${RESET}"
       fi
+      continue
+      ;;
+    /personality)
+      if [[ "$personality" == "true" ]]; then
+        personality="false"
+        echo "${MUTED}Personality mode: OFF (plain/neutral answers).${RESET}"
+      else
+        personality="true"
+        echo "${MUTED}Personality mode: ON.${RESET}"
+      fi
+      continue
+      ;;
+    /deep)
+      if [[ "$deep_thinking" == "true" ]]; then
+        deep_thinking="false"
+        echo "${MUTED}Deep-thinking mode: OFF (default model).${RESET}"
+      else
+        deep_thinking="true"
+        echo "${MUTED}Deep-thinking mode: ON (slower, larger model).${RESET}"
+      fi
+      continue
+      ;;
+    /status)
+      echo "${MUTED}personality=${personality}  deep_thinking=${deep_thinking}${RESET}"
       continue
       ;;
   esac
