@@ -354,6 +354,36 @@ conversation_link() {
   echo "${MUTED}↳ Continue in browser: ${LAIN_URL}/?c=${conversation_id}${RESET}"
 }
 
+# Fetches and prints a conversation's past messages (best-effort — silently
+# does nothing on error so it never blocks the REPL from starting). Used
+# when resuming an existing conversation so the terminal actually shows
+# what was said before, instead of just a blank prompt.
+print_history() {
+  local id="$1"
+  [[ -z "$id" ]] && return 0
+  local response http_code body
+  response=$(curl -sS -w '\n%{http_code}' \
+    -H "Authorization: Bearer $LAIN_API_TOKEN" \
+    "$LAIN_URL/api/conversations/$id" 2>/dev/null) || return 0
+  http_code="${response##*$'\n'}"
+  body="${response%$'\n'*}"
+  [[ "$http_code" != "200" ]] && return 0
+
+  local count role content
+  count=$(jq 'length' <<<"$body" 2>/dev/null) || return 0
+  [[ "$count" == "0" ]] && return 0
+  for ((_hist_i = 0; _hist_i < count; _hist_i++)); do
+    role=$(jq -r ".[$_hist_i].role" <<<"$body")
+    content=$(jq -r ".[$_hist_i].content" <<<"$body")
+    if [[ "$role" == "user" ]]; then
+      echo "${GOLD}you>${RESET} $content"
+    else
+      echo "${GOLD}Lain:${RESET} $content"
+    fi
+  done
+  echo "${MUTED}── (resumed above) ──────────────────${RESET}"
+}
+
 if [[ -n "$message" ]]; then
   reply="$(send_message "$message")"
   [[ -f "$STATE_FILE" ]] && conversation_id="$(cat "$STATE_FILE")"
@@ -363,8 +393,11 @@ if [[ -n "$message" ]]; then
 fi
 
 # No message given — interactive REPL.
-echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL)${RESET}"
-[[ -n "$conversation_id" ]] && conversation_link
+echo "${CRIMSON}⚔ Lain${RESET} ${MUTED}(type 'exit' or Ctrl-D to quit, '/new' for a fresh conversation, '/link' for the web URL, '/history' to reprint past messages)${RESET}"
+if [[ -n "$conversation_id" ]]; then
+  conversation_link
+  print_history "$conversation_id"
+fi
 while true; do
   printf '%s' "${GOLD}you>${RESET} "
   if ! IFS= read -r line; then
@@ -383,6 +416,14 @@ while true; do
     /link)
       if [[ -n "$conversation_id" ]]; then
         conversation_link
+      else
+        echo "${MUTED}No conversation started yet — send a message first.${RESET}"
+      fi
+      continue
+      ;;
+    /history)
+      if [[ -n "$conversation_id" ]]; then
+        print_history "$conversation_id"
       else
         echo "${MUTED}No conversation started yet — send a message first.${RESET}"
       fi
