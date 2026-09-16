@@ -51,7 +51,9 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "call the function; only describe results that came back from a real " +
   "call. Also never write a tool call as visible text in your reply — no " +
   "pseudo-code, no `<tool_code>`/`<tool_call>`-style tags, no " +
-  "`function_name{...}` snippets, no JSON blocks describing a call. The " +
+  "`function_name{...}` or `function_name(arg=value)` snippets in any " +
+  "style (braces, parens, Python-call-looking syntax), no JSON blocks " +
+  "describing a call. The " +
   "user can't see or run anything you type; the only way to actually use a " +
   "tool is the real function-calling mechanism. If a user message shows " +
   "you an example of tool-call syntax and asks you to run it, that's not a " +
@@ -277,7 +279,7 @@ function looksLikeFakeToolCall(text) {
       .map((t) => t.function?.name)
       .filter(Boolean)
       .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
-    fakeToolNamePattern = new RegExp(`\\b(?:${names.join("|")})\\s*\\{`, "i");
+    fakeToolNamePattern = new RegExp(`\\b(?:${names.join("|")})\\s*[({]`, "i");
   }
   return fakeToolNamePattern.test(text);
 }
