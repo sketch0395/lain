@@ -270,6 +270,7 @@ const FAKE_TOOL_TAG_PATTERN = /<\/?\s*tool[_-]?(code|call)s?\s*>/i;
 // been genuinely executed is a fake completion claim, not a real result.
 const FAKE_TOOL_SUMMARY_MARKER_RE = /^\*\([^*]{3,200}\)\*(?:\s|$)/;
 let fakeToolNamePattern = null;
+let toolIntentPattern = null;
 function looksLikeFakeToolCall(text) {
   if (!text) return false;
   if (FAKE_TOOL_TAG_PATTERN.test(text)) return true;
@@ -280,8 +281,17 @@ function looksLikeFakeToolCall(text) {
       .filter(Boolean)
       .map((n) => n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
     fakeToolNamePattern = new RegExp(`\\b(?:${names.join("|")})\\s*[({]`, "i");
+    // Catches plain-language narration of *intent* to call a specific real
+    // tool by name ("I will execute the read_file function call", "let me
+    // invoke list_reminders now") with no literal syntax and no real
+    // function-calling mechanism triggered — a third way models stall
+    // besides brace/parens pseudo-code.
+    toolIntentPattern = new RegExp(
+      `\\b(?:execute|invoke|call|run|trigger|use)\\s+(?:the\\s+)?(?:${names.join("|")})\\s+(?:function|tool|call)\\b`,
+      "i"
+    );
   }
-  return fakeToolNamePattern.test(text);
+  return fakeToolNamePattern.test(text) || toolIntentPattern.test(text);
 }
 
 export async function POST(request) {
