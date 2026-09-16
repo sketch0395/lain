@@ -260,10 +260,18 @@ function emptyReplyFallback(convId, stage) {
 // conversation history) keeps a single hiccup from getting baked into
 // history, where the model tends to keep imitating its own past turn.
 const FAKE_TOOL_TAG_PATTERN = /<\/?\s*tool[_-]?(code|call)s?\s*>/i;
+// Matches the "*(did thing X)*" tool-summary marker that app/api/chat/
+// confirm/route.js prefixes onto a real post-confirmation reply. The
+// model can pick up this surface pattern from its own past turns (even
+// though loadHistory now strips it from context) or invent it fresh —
+// either way, text that *starts* with this marker and nothing else has
+// been genuinely executed is a fake completion claim, not a real result.
+const FAKE_TOOL_SUMMARY_MARKER_RE = /^\*\([^*]{3,200}\)\*(?:\s|$)/;
 let fakeToolNamePattern = null;
 function looksLikeFakeToolCall(text) {
   if (!text) return false;
   if (FAKE_TOOL_TAG_PATTERN.test(text)) return true;
+  if (FAKE_TOOL_SUMMARY_MARKER_RE.test(text)) return true;
   if (!fakeToolNamePattern) {
     const names = getToolDefinitions()
       .map((t) => t.function?.name)
