@@ -65,6 +65,7 @@ require("./lib/diagnostics").registerRoutes(router);
 require("./lib/omarchy").registerRoutes(router);
 require("./lib/files").registerRoutes(router);
 require("./lib/forensics").registerRoutes(router);
+require("./lib/network").registerRoutes(router);
 require("./lib/notify").registerRoutes(router);
 require("./lib/notes").registerRoutes(router);
 require("./lib/update").registerRoutes(router);
