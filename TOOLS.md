@@ -56,6 +56,9 @@ a sensitive-path denylist (see `tools-agent/lib/paths.js`).
 | `traceroute_host`         | Hop-by-hop path to a host (via `tracepath`, no root required)          | `host`, `max_hops`                    | `GET /traceroute`       | `tools-agent/lib/network.js`         |
 | `whois_lookup`            | WHOIS registration info for a domain/IP                                | `query`                               | `GET /whois`            | `tools-agent/lib/network.js`         |
 | `port_scan`               | Plain TCP connect scan (open/closed/filtered), no `nmap` dependency, max 256 ports | `host`, `ports`        | `GET /port-scan`        | `tools-agent/lib/network.js`         |
+| `check_port`              | Checks a single port on a host, identifies well-known service name, grabs a banner if offered | `host`, `port`         | `GET /check-port`       | `tools-agent/lib/network.js`         |
+| `lan_device_scan`         | Discovers devices on the local LAN (IP/MAC/hostname) via ping sweep + ARP/neighbor table, auto-detects `/24` subnet | `subnet` (optional) | `GET /lan-scan`         | `tools-agent/lib/network.js`         |
+| `speed_test`              | Download/upload internet bandwidth test (Mbps) via Cloudflare's public speed-test endpoints | (none)                | `GET /speed-test`       | `tools-agent/lib/network.js`         |
 | `omarchy_status`          | Current theme, active window/workspace, monitors (`hyprctl`)         | —                                    | `GET /omarchy/status`   | `tools-agent/lib/omarchy.js`         |
 | `list_omarchy_themes`     | Installed theme names (`omarchy-theme-list`)                          | —                                    | `GET /omarchy/themes`   | `tools-agent/lib/omarchy.js`         |
 | `set_omarchy_theme`       | Switch the desktop theme (`omarchy-theme-set`, name-validated)        | `theme`                              | `POST /omarchy/theme`  | `tools-agent/lib/omarchy.js`         |

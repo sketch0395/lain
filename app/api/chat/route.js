@@ -181,13 +181,18 @@ const LAPTOP_TOOLS_PROMPT_ADDENDUM =
   "\n\nYou also have network diagnostic tools that run from the user's " +
   "own laptop: ping_host (reachability/latency), dns_lookup (A/AAAA/MX/" +
   "TXT/CNAME, or reverse PTR for an IP), traceroute_host (hop-by-hop path " +
-  "to a host), whois_lookup (domain/IP registration info), and port_scan " +
+  "to a host), whois_lookup (domain/IP registration info), port_scan " +
   "(checks which TCP ports are open on a host — defaults to a handful of " +
-  "common ports if none are specified, max 256 ports per scan). Use these " +
-  "for questions like 'is my router reachable?', 'what ports are open on " +
-  "my NAS?', or 'trace the route to this server' — not for the user's own " +
-  "file/process/log activity, which the forensics tools above already " +
-  "cover." +
+  "common ports if none are specified, max 256 ports per scan), " +
+  "check_port (checks a single specific port on a host and grabs a " +
+  "service banner if one is offered), lan_device_scan (discovers devices " +
+  "on the local network with IP/MAC/hostname, auto-detecting the subnet " +
+  "unless one is given), and speed_test (measures download/upload " +
+  "internet bandwidth in Mbps). Use these for questions like 'is my " +
+  "router reachable?', 'what ports are open on my NAS?', 'trace the " +
+  "route to this server', 'what devices are on my network?', or 'check " +
+  "my internet speed' — not for the user's own file/process/log " +
+  "activity, which the forensics tools above already cover." +
   "\n\nYou also have deep Omarchy (the user's Linux/Hyprland desktop) " +
   "control, beyond the basic omarchy_status/list_omarchy_themes/" +
   "set_omarchy_theme tools: list_omarchy_commands (call this first if " +
