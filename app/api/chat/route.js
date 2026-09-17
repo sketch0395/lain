@@ -93,6 +93,20 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "fits), a short title, and write the content clearly and self-contained. " +
   "Unlike remember_fact (short personal facts about the user), this is for " +
   "security/threat reference material.\n\n" +
+  "You also have lookup_playbook: a separate library of step-by-step " +
+  "incident response playbooks/runbooks the user has written or " +
+  "transcribed (phishing report, ransomware, account compromise, data " +
+  "exfiltration, malware infection, etc.). The MOMENT the user describes " +
+  "an active or suspected security incident, or explicitly asks for a " +
+  "playbook/runbook, call lookup_playbook BEFORE improvising your own " +
+  "response steps. If it returns a match, actually follow it: walk the " +
+  "user through the steps in order, in your own words, don't just dump it " +
+  "verbatim and don't skip ahead. If nothing matches, say so and fall " +
+  "back to general incident-response best practice. You also have " +
+  "add_playbook: use it whenever the user asks you to save, write down, " +
+  "or transcribe a playbook/runbook/IR plan — write the content as a " +
+  "clear ordered list of steps, since it will be followed literally " +
+  "during a real incident later, not just cited like threat intel.\n\n" +
   "You also have fetch_web_page: use it whenever the user sends/pastes a " +
   "link and asks you to read it, summarize it, or pull knowledge from it " +
   "(a security advisory, CVE writeup, blog post, article, etc.). Fetch it, " +

@@ -608,6 +608,15 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
                 <span className="opacity-60">›</span>
               </Link>
 
+              <Link
+                href="/playbooks"
+                onClick={() => setSettingsOpen(false)}
+                className="w-full flex items-center justify-between px-1 py-2 text-sm text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+              >
+                <span>📘 Playbooks</span>
+                <span className="opacity-60">›</span>
+              </Link>
+
               <button
                 type="button"
                 onClick={() => {

@@ -1,19 +1,20 @@
 "use client";
 
-// Threat Intel library — a dedicated page (not a modal) presented like a
-// file directory: Categories are folders, Titles are files inside each
-// folder, and Contents render like a file preview pane. There's simply too
-// much reference material (kill chain phases, ATT&CK techniques, IOCs,
-// mitigations, full write-ups) to fit comfortably in a small popup.
-// Lain reads this back via the lookup_threat_intel/add_threat_intel tools;
-// this page is the human-curated, browsable side. Talks to /api/threat-intel.
+// Incident Response Playbook library — modeled directly on the Threat
+// Intel page (app/threat-intel/page.js): a dedicated page presented like
+// a file directory (categories are folders, titles are files, content is
+// a preview pane). Playbooks are step-by-step runbooks Lain follows when
+// the user calls out an active/suspected security incident (see
+// lookup_playbook/add_playbook in lib/tools/cyberIntel.js). This page is
+// the human-curated, browsable side — write or transcribe a playbook here
+// and Lain will use it. Talks to /api/playbooks.
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 const EMPTY_FORM = { category: "", title: "", content: "", tags: "" };
 
-export default function ThreatIntelPage() {
+export default function PlaybooksPage() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -23,6 +24,8 @@ export default function ThreatIntelPage() {
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
   const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editForm, setEditForm] = useState(EMPTY_FORM);
 
   useEffect(() => {
     load();
@@ -31,11 +34,11 @@ export default function ThreatIntelPage() {
   async function load() {
     setLoading(true);
     try {
-      const res = await fetch("/api/threat-intel");
+      const res = await fetch("/api/playbooks");
       const data = await res.json();
       setEntries(data.entries || []);
     } catch {
-      setError("Couldn't load the threat intel library.");
+      setError("Couldn't load the playbook library.");
     }
     setLoading(false);
   }
@@ -46,7 +49,7 @@ export default function ThreatIntelPage() {
     setSaving(true);
     setError("");
     try {
-      const res = await fetch("/api/threat-intel", {
+      const res = await fetch("/api/playbooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -66,16 +69,58 @@ export default function ThreatIntelPage() {
         setSelectedId(entry.id);
       }
     } catch {
-      setError("Couldn't save that entry.");
+      setError("Couldn't save that playbook.");
+    }
+    setSaving(false);
+  }
+
+  function startEdit(entry) {
+    setEditForm({
+      category: entry.category,
+      title: entry.title,
+      content: entry.content,
+      tags: entry.tags || "",
+    });
+    setEditing(true);
+  }
+
+  async function saveEdit(entry) {
+    if (!editForm.category.trim() || !editForm.title.trim() || !editForm.content.trim()) return;
+    setSaving(true);
+    setError("");
+    try {
+      const res = await fetch(`/api/playbooks/${entry.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category: editForm.category.trim(),
+          title: editForm.title.trim(),
+          content: editForm.content.trim(),
+          tags: editForm.tags.trim(),
+        }),
+      });
+      if (!res.ok) throw new Error("Save failed");
+      const { entry: updated } = await res.json();
+      setEditing(false);
+      await load();
+      if (updated) {
+        setSelectedCategory(updated.category);
+        setSelectedId(updated.id);
+      }
+    } catch {
+      setError("Couldn't save those changes.");
     }
     setSaving(false);
   }
 
   async function remove(id) {
     setEntries((prev) => prev.filter((e) => e.id !== id));
-    if (selectedId === id) setSelectedId(null);
+    if (selectedId === id) {
+      setSelectedId(null);
+      setEditing(false);
+    }
     try {
-      await fetch(`/api/threat-intel/${id}`, { method: "DELETE" });
+      await fetch(`/api/playbooks/${id}`, { method: "DELETE" });
     } catch {
       setError("Couldn't delete that — refreshing.");
       load();
@@ -127,7 +172,7 @@ export default function ThreatIntelPage() {
             ←
           </Link>
           <h1 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent truncate">
-            🛡️ Threat Intel Library
+            📘 Incident Response Playbooks
           </h1>
         </div>
         <button
@@ -135,15 +180,17 @@ export default function ThreatIntelPage() {
           onClick={() => setShowAddForm((v) => !v)}
           className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40 shrink-0"
         >
-          {showAddForm ? "Cancel" : "+ New Entry"}
+          {showAddForm ? "Cancel" : "+ New Playbook"}
         </button>
       </header>
 
       <p className="px-4 pt-3 text-xs text-[var(--lain-muted)]">
-        Lain&apos;s curated cyber threat reference library — kill chain phases,
-        attack techniques, IOCs, mitigations, and anything else worth citing
-        instead of guessing. Browse it like a file tree: pick a category
-        folder, then a title.
+        Step-by-step runbooks for handling specific security incidents —
+        phishing reports, ransomware, account compromise, data exfiltration,
+        malware infections, and anything else worth having on hand. When you
+        describe an active incident in chat, Lain looks here first and
+        follows the matching playbook. Browse it like a file tree: pick a
+        category folder, then a title.
       </p>
 
       {showAddForm && (
@@ -155,11 +202,11 @@ export default function ThreatIntelPage() {
             <input
               value={form.category}
               onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
-              placeholder="Category (e.g. kill_chain)"
-              list="threat-intel-categories"
+              placeholder="Category (e.g. ransomware)"
+              list="playbook-categories"
               className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
             />
-            <datalist id="threat-intel-categories">
+            <datalist id="playbook-categories">
               {categoryOrder.map((c) => (
                 <option key={c} value={c} />
               ))}
@@ -167,15 +214,15 @@ export default function ThreatIntelPage() {
             <input
               value={form.title}
               onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="Title (e.g. Reconnaissance)"
+              placeholder="Title (e.g. Suspected Phishing Email)"
               className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
             />
           </div>
           <textarea
             value={form.content}
             onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-            placeholder="Content / description / indicators / mitigations…"
-            rows={4}
+            placeholder={"Steps, numbered in order:\n1. Detect...\n2. Contain...\n3. Eradicate...\n4. Recover...\n5. Lessons learned..."}
+            rows={8}
             className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
           <div className="flex gap-2">
@@ -213,8 +260,9 @@ export default function ThreatIntelPage() {
         <p className="px-4 text-sm text-[var(--lain-muted)]">Loading…</p>
       ) : categoryOrder.length === 0 ? (
         <p className="px-4 text-sm text-[var(--lain-muted)]">
-          Nothing in the library yet — add reference entries above (start
-          with the cyber kill chain phases, then expand from there).
+          Nothing here yet — add a playbook above (start with the incidents
+          you&apos;re most likely to face: phishing, ransomware, account
+          compromise).
         </p>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col md:flex-row border-t border-[var(--lain-border)]">
@@ -230,6 +278,7 @@ export default function ThreatIntelPage() {
                   onClick={() => {
                     setSelectedCategory(category);
                     setSelectedId(null);
+                    setEditing(false);
                   }}
                   className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm border-l-2 ${
                     active
@@ -248,7 +297,7 @@ export default function ThreatIntelPage() {
           <div className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-[var(--lain-border)] overflow-y-auto max-h-52 md:max-h-none">
             {!selectedCategory ? (
               <p className="p-3 text-xs text-[var(--lain-muted)]">
-                ← Select a category folder to see its entries.
+                ← Select a category folder to see its playbooks.
               </p>
             ) : (
               titlesInCategory.map((e) => {
@@ -257,7 +306,10 @@ export default function ThreatIntelPage() {
                   <button
                     key={e.id}
                     type="button"
-                    onClick={() => setSelectedId(e.id)}
+                    onClick={() => {
+                      setSelectedId(e.id);
+                      setEditing(false);
+                    }}
                     className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm border-l-2 ${
                       active
                         ? "border-[var(--lain-highlight)] bg-[var(--lain-panel-alt)] text-[var(--lain-text)]"
@@ -271,12 +323,56 @@ export default function ThreatIntelPage() {
             )}
           </div>
 
-          {/* Column 3: Content preview */}
+          {/* Column 3: Content preview / edit */}
           <div className="flex-1 min-h-0 overflow-y-auto p-4">
             {!selectedEntry ? (
               <p className="text-sm text-[var(--lain-muted)]">
-                ← Select an entry to view its contents.
+                ← Select a playbook to view its steps.
               </p>
+            ) : editing ? (
+              <div className="space-y-2 max-w-3xl">
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    value={editForm.category}
+                    onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+                    className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                  />
+                  <input
+                    value={editForm.title}
+                    onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
+                    className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                  />
+                </div>
+                <textarea
+                  value={editForm.content}
+                  onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
+                  rows={12}
+                  className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                />
+                <input
+                  value={editForm.tags}
+                  onChange={(e) => setEditForm((f) => ({ ...f, tags: e.target.value }))}
+                  placeholder="Tags, comma separated"
+                  className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                />
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => saveEdit(selectedEntry)}
+                    disabled={saving}
+                    className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
+                  >
+                    Save changes
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditing(false)}
+                    className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-text)] border border-[var(--lain-border)] rounded-lg px-3 py-1.5"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-3 max-w-3xl">
                 <div className="flex items-start justify-between gap-3">
@@ -288,13 +384,22 @@ export default function ThreatIntelPage() {
                       {selectedEntry.title}
                     </h2>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => remove(selectedEntry.id)}
-                    className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] border border-[var(--lain-border)] rounded-lg px-2 py-1 shrink-0"
-                  >
-                    Delete
-                  </button>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(selectedEntry)}
+                      className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] border border-[var(--lain-border)] rounded-lg px-2 py-1"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(selectedEntry.id)}
+                      className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] border border-[var(--lain-border)] rounded-lg px-2 py-1"
+                    >
+                      Delete
+                    </button>
+                  </div>
                 </div>
                 <p className="text-sm text-[var(--lain-text)] whitespace-pre-wrap leading-relaxed">
                   {selectedEntry.content}
