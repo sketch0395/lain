@@ -479,6 +479,25 @@ independent of the tools agent above.
    exposed RDP in Texas", or "resolve example.com and check what's running
    on it".
 
+## Obsidian vault integration (optional)
+
+Lets Lain search, read, and save notes in a real local Obsidian vault (a
+plain folder of `.md` files) — no Obsidian plugin needed, since Lain runs
+on the same machine as the vault and just reads/writes the files directly.
+
+1. `./deploy.sh` prompts for your vault's folder path on a fresh install
+   if `OBSIDIAN_VAULT_PATH` isn't already set in `.env` — just paste it in
+   when asked (e.g. `/home/you/Documents/YourVault`). You can also set it
+   manually any time: add `OBSIDIAN_VAULT_PATH=...` to `.env`, then
+   `./deploy.sh` to pick it up. Leave it blank to disable — Lain simply
+   won't offer these tools.
+2. The whole vault gets bind-mounted read/write into the container. Lain
+   can search/read any note in it, but only ever *writes* new notes into a
+   dedicated subfolder (`OBSIDIAN_WRITE_SUBFOLDER` in `.env`, default
+   `Lain`) — she never touches your other notes.
+3. Ask Lain things like "check my notes on the epyon project", "what did I
+   write about Docker rebuilds?", or "save this to my vault".
+
 ## Reminders & notifications
 
 Ask Lain to remind you about things in plain language — she'll figure out

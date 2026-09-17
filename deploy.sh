@@ -226,6 +226,43 @@ if ! shodan_configured; then
   fi
 fi
 
+# --- Obsidian vault integration (optional) ---
+# Offers to set this up the same way tools-agent/Shodan are above. Lain
+# runs on this same machine, so it's a direct filesystem bind-mount (see
+# docker-compose.yml's OBSIDIAN_VAULT_PATH) — no plugin or network setup
+# needed, unlike Asuna's REST-API-based version of this feature.
+obsidian_configured() {
+  grep -qE '^OBSIDIAN_VAULT_PATH=\S+' .env 2>/dev/null
+}
+
+if ! obsidian_configured; then
+  if [[ "${LAIN_SKIP_OBSIDIAN_SETUP:-}" == "true" ]]; then
+    : # explicitly opted out, skip silently
+  elif [[ -t 0 ]]; then
+    echo
+    echo "Lain can optionally read/write notes in a local Obsidian vault (a"
+    echo "plain folder of .md files — no Obsidian plugin needed) whenever you"
+    echo "ask her to check your notes or save something to them."
+    read -rp "Path to your Obsidian vault folder, or blank to skip: " obsidian_path
+    if [[ -n "$obsidian_path" ]]; then
+      obsidian_path="${obsidian_path/#\~/$HOME}"
+      if [[ -d "$obsidian_path" ]]; then
+        set_env_var OBSIDIAN_VAULT_PATH "$obsidian_path"
+        set_env_var OBSIDIAN_WRITE_SUBFOLDER "Lain"
+        echo "==> Wired up OBSIDIAN_VAULT_PATH in .env (writes go to a 'Lain' subfolder in it)"
+      else
+        warn "\"$obsidian_path\" doesn't exist — skipping. Add OBSIDIAN_VAULT_PATH to .env any time to enable it later."
+      fi
+    else
+      echo "==> Skipping — add OBSIDIAN_VAULT_PATH to .env any time to enable it later."
+    fi
+  else
+    echo "==> Obsidian integration not configured and no terminal to prompt (non-interactive run)."
+    echo "    Add OBSIDIAN_VAULT_PATH to .env, then re-run ./deploy.sh to enable it."
+    echo "    Set LAIN_SKIP_OBSIDIAN_SETUP=true to silence this message."
+  fi
+fi
+
 echo "==> Building and starting Lain via docker compose (local)"
 export GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
 docker compose up -d --build
