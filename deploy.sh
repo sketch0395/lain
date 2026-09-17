@@ -1,9 +1,96 @@
 #!/usr/bin/env bash
-# Builds and starts Lain locally via docker compose. Lain is local-only —
-# there is no remote server; this always runs on the current machine.
+# Builds and starts Lain via docker compose — locally by default, or on a
+# remote server over SSH if one is given. There's no hardcoded remote host:
+# whoever deploys supplies the IP explicitly.
 set -euo pipefail
 
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# --- Optional remote deploy target ---------------------------------------
+# Usage:
+#   ./deploy.sh                       # local (default, unchanged behavior)
+#   ./deploy.sh --host 10.5.1.30      # deploy to a remote server over SSH
+#   LAIN_SSH_HOST=10.5.1.30 ./deploy.sh
+#
+# Whether Ollama runs on that same remote server or elsewhere on the LAN is
+# entirely up to OLLAMA_HOST in the remote .env (created from .env.example
+# on first run there) — set it to the remote server's own address (e.g.
+# http://host.docker.internal:11434) if Ollama lives there too, or to
+# another machine's LAN IP if not.
+LAIN_SSH_HOST="${LAIN_SSH_HOST:-}"
+LAIN_SSH_USER="${LAIN_SSH_USER:-$USER}"
+LAIN_SSH_PORT="${LAIN_SSH_PORT:-22}"
+LAIN_REMOTE_DIR="${LAIN_REMOTE_DIR:-~/lain}"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --host) LAIN_SSH_HOST="$2"; shift 2 ;;
+    --user) LAIN_SSH_USER="$2"; shift 2 ;;
+    --port) LAIN_SSH_PORT="$2"; shift 2 ;;
+    --dir) LAIN_REMOTE_DIR="$2"; shift 2 ;;
+    -h|--help)
+      cat <<'EOF'
+Usage: ./deploy.sh [--host IP] [--user NAME] [--port N] [--dir PATH]
+
+No flags: builds and starts Lain locally (default, unchanged behavior).
+
+  --host IP   Deploy to a remote server over SSH instead of locally. Files
+              are rsynced there and docker compose runs on that machine.
+              Its own .env (created from .env.example on first run)
+              controls everything, including OLLAMA_HOST — point that at
+              wherever Ollama actually runs: the same remote server, or a
+              different machine on the LAN.
+  --user NAME SSH user for --host (default: current user, "$USER")
+  --port N    SSH port for --host (default: 22)
+  --dir PATH  Remote directory to deploy into (default: ~/lain)
+
+Env vars LAIN_SSH_HOST / LAIN_SSH_USER / LAIN_SSH_PORT / LAIN_REMOTE_DIR
+work the same as the flags above.
+EOF
+      exit 0
+      ;;
+    *) echo "Unknown argument: $1 (see --help)" >&2; exit 1 ;;
+  esac
+done
+
+if [[ -n "$LAIN_SSH_HOST" ]]; then
+  echo "==> Syncing project files to ${LAIN_SSH_USER}@${LAIN_SSH_HOST}:${LAIN_REMOTE_DIR}"
+  # .env / .env.local (and *.local variants) are intentionally excluded: the
+  # remote server's .env holds its own live secrets and OLLAMA_HOST choice,
+  # and must be managed directly on that server, never overwritten (or
+  # deleted, via --delete) by whatever does or doesn't exist locally.
+  # .env.example has no secrets and IS synced, so the template on the
+  # server always reflects the latest config options.
+  rsync -az --delete \
+    --exclude 'node_modules' \
+    --exclude '.next' \
+    --exclude '.git' \
+    --exclude 'data' \
+    --exclude '.env' \
+    --exclude '.env.local' \
+    --exclude '.env.*.local' \
+    -e "ssh -p ${LAIN_SSH_PORT}" \
+    ./ "${LAIN_SSH_USER}@${LAIN_SSH_HOST}:${LAIN_REMOTE_DIR}/"
+
+  GIT_COMMIT="$(git rev-parse HEAD 2>/dev/null || echo unknown)"
+
+  echo "==> Building and starting Lain via docker compose on ${LAIN_SSH_HOST}"
+  ssh -p "${LAIN_SSH_PORT}" "${LAIN_SSH_USER}@${LAIN_SSH_HOST}" \
+    "cd ${LAIN_REMOTE_DIR} && \
+     if [ ! -f .env ]; then cp .env.example .env; echo '⚠️  Created .env from .env.example on ${LAIN_SSH_HOST} — edit OLLAMA_HOST (point it at wherever Ollama runs: this server itself, e.g. http://host.docker.internal:11434, or another LAN machine) plus other secrets, then re-run ./deploy.sh --host ${LAIN_SSH_HOST}'; exit 1; fi && \
+     if ! (command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1 && systemctl is-active --quiet docker) && ! docker info >/dev/null 2>&1; then \
+       echo '==> Docker is not running on ${LAIN_SSH_HOST} — starting it...'; \
+       if command -v systemctl >/dev/null 2>&1 && systemctl list-unit-files docker.service >/dev/null 2>&1; then sudo systemctl start docker; \
+       elif command -v service >/dev/null 2>&1; then sudo service docker start; fi; \
+       sleep 2; \
+     fi && \
+     GIT_COMMIT=${GIT_COMMIT} docker compose up -d --build"
+
+  echo "==> Done. Check .env's LAIN_HOST_PORT on ${LAIN_SSH_HOST} for the actual port (default 3000)."
+  exit 0
+fi
+
+echo "==> No --host given — deploying locally"
 
 if [[ ! -f .env ]]; then
   cp .env.example .env
