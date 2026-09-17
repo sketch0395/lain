@@ -2,7 +2,7 @@
 // has approved or denied it in the chat UI. See app/api/chat/route.js for
 // where the confirmation request originates.
 
-import { saveMessage } from "@/lib/conversations";
+import { loadHistory, saveMessage } from "@/lib/conversations";
 import { describeToolCall, executeTool, parseArgs } from "@/lib/tools";
 import { deletePending, getPending } from "@/lib/pendingToolCalls";
 import { callOllama, OLLAMA_HOST } from "@/lib/ollama";
@@ -44,8 +44,18 @@ export async function POST(request) {
     toolResultMessages.push({ role: "tool", content });
   }
 
+  // `messages` is the snapshot captured when the tool call was first proposed.
+  // If another device (or tab) sent a new message to this same conversation
+  // while this confirmation sat pending, that snapshot is now stale. Re-pull
+  // the conversation history fresh from the DB so the follow-up completion
+  // sees everything that's actually happened, and only fall back to the
+  // stale snapshot's leading system message (position 0), which doesn't
+  // depend on other devices.
+  const systemMessage = messages[0]?.role === "system" ? [messages[0]] : [];
+  const freshHistory = loadHistory(conversationId);
   const followUpMessages = [
-    ...messages,
+    ...systemMessage,
+    ...freshHistory,
     assistantToolMessage,
     ...toolResultMessages,
   ];
