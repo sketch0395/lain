@@ -12,6 +12,8 @@ export default function MemoriesPanel({ onClose }) {
   const [error, setError] = useState("");
   const [newFact, setNewFact] = useState("");
   const [saving, setSaving] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editValue, setEditValue] = useState("");
 
   useEffect(() => {
     load();
@@ -59,6 +61,36 @@ export default function MemoriesPanel({ onClose }) {
     }
   }
 
+  function startEdit(m) {
+    setEditingId(m.id);
+    setEditValue(m.content);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditValue("");
+  }
+
+  async function saveEdit(id) {
+    const trimmed = editValue.trim();
+    if (!trimmed) return cancelEdit();
+    const prev = memories;
+    setMemories((cur) => cur.map((m) => (m.id === id ? { ...m, content: trimmed } : m)));
+    setEditingId(null);
+    try {
+      const res = await fetch(`/api/memories/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: trimmed }),
+      });
+      if (!res.ok) throw new Error("Update failed");
+    } catch {
+      setError("Couldn't save that edit — refreshing.");
+      setMemories(prev);
+      load();
+    }
+  }
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
@@ -84,7 +116,7 @@ export default function MemoriesPanel({ onClose }) {
 
         <p className="text-xs text-[var(--lain-muted)]">
           Things Lain has learned about you from conversation. Delete anything
-          wrong or that you'd rather she forget.
+          wrong or that you&apos;d rather she forget.
         </p>
 
         <form onSubmit={addFact} className="flex gap-2">
@@ -118,15 +150,56 @@ export default function MemoriesPanel({ onClose }) {
                 key={m.id}
                 className="flex items-start justify-between gap-2 border border-[var(--lain-border)] rounded-lg p-2"
               >
-                <p className="text-sm text-[var(--lain-text)] flex-1">{m.content}</p>
-                <button
-                  type="button"
-                  onClick={() => remove(m.id)}
-                  aria-label="Forget this"
-                  className="text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] px-1"
-                >
-                  ✕
-                </button>
+                {editingId === m.id ? (
+                  <>
+                    <input
+                      autoFocus
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveEdit(m.id);
+                        if (e.key === "Escape") cancelEdit();
+                      }}
+                      className="flex-1 bg-[var(--lain-panel-alt)] border border-[var(--lain-highlight)]/40 rounded px-2 py-1 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => saveEdit(m.id)}
+                      aria-label="Save edit"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-highlight)] px-1"
+                    >
+                      ✓
+                    </button>
+                    <button
+                      type="button"
+                      onClick={cancelEdit}
+                      aria-label="Cancel edit"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] px-1"
+                    >
+                      ✕
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-[var(--lain-text)] flex-1">{m.content}</p>
+                    <button
+                      type="button"
+                      onClick={() => startEdit(m)}
+                      aria-label="Edit this"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-highlight)] px-1"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => remove(m.id)}
+                      aria-label="Forget this"
+                      className="text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] px-1"
+                    >
+                      ✕
+                    </button>
+                  </>
+                )}
               </div>
             ))}
           </div>
