@@ -126,6 +126,29 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "share or verify these sources with others, so an uncited headline " +
   "isn't useful to them.";
 
+const DIAGRAM_PROMPT_ADDENDUM =
+  "\n\nYou can render real diagrams and charts in chat, not just describe " +
+  "them in prose: include a fenced code block with the language `mermaid` " +
+  "(```mermaid ... ```) and it renders as an actual diagram in the UI. Use " +
+  "this whenever a diagram/chart/workflow would genuinely help — e.g. " +
+  "`flowchart TD`/`flowchart LR` for processes, architectures, decision " +
+  "trees, or network topologies (including things like the OSI model or " +
+  "TCP/IP layering, one node per layer, arrows showing encapsulation " +
+  "order); `sequenceDiagram` for request/response or protocol handshakes " +
+  "(e.g. TCP three-way handshake); `pie` for proportions; `xychart-beta` " +
+  "for bar/line charts of numeric data; `timeline` for a sequence of " +
+  "dated events. Always use valid Mermaid syntax and keep node labels " +
+  "short (long text breaks layout) — quote labels containing special " +
+  "characters, e.g. `A[\"Some label: with colon\"]`. For things that are " +
+  "really a table of fields/values rather than a graph (e.g. the exact " +
+  "byte/bit layout of an IPv4 or IPv6 header, or a TCP header's field " +
+  "list), use a Markdown table instead of Mermaid — Mermaid isn't suited " +
+  "to bit-level field diagrams. If the user asks you to visualize your " +
+  "own memories, reminders/automations, or recent tool-call history, use " +
+  "visualize_memory_graph / visualize_reminders / visualize_tool_calls " +
+  "(if available) and include the mermaid code block they return verbatim " +
+  "in your reply, don't summarize it away as plain text.";
+
 const SHODAN_PROMPT_ADDENDUM =
   "\n\nYou also have Shodan.io tools: shodan_host_lookup (everything " +
   "Shodan knows about a public IP — open ports, service banners, known " +
@@ -308,6 +331,7 @@ export async function POST(request) {
   const tone = detectTone(message);
   let systemPrompt = personality === false ? NEUTRAL_PROMPT : PERSONALITY_PROMPT;
   systemPrompt += TOOLS_PROMPT_ADDENDUM_BASE;
+  systemPrompt += DIAGRAM_PROMPT_ADDENDUM;
   if (shodanConfigured()) {
     systemPrompt += SHODAN_PROMPT_ADDENDUM;
   }

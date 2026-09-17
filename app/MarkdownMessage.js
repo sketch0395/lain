@@ -2,6 +2,7 @@
 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import MermaidDiagram from "./MermaidDiagram";
 
 /**
  * Renders assistant/user chat message content as Markdown (bold, italics,
@@ -25,8 +26,12 @@ export default function MarkdownMessage({ content }) {
               className="text-[var(--lain-highlight-soft)] underline hover:text-[var(--lain-highlight)] break-all"
             />
           ),
-          code: ({ node, inline, className, children, ...props }) =>
-            inline ? (
+          code: ({ node, inline, className, children, ...props }) => {
+            const isMermaid = !inline && /language-mermaid/.test(className || "");
+            if (isMermaid) {
+              return <MermaidDiagram code={String(children).replace(/\n$/, "")} />;
+            }
+            return inline ? (
               <code
                 className="rounded bg-black/30 px-1 py-0.5 text-[0.85em]"
                 {...props}
@@ -40,7 +45,8 @@ export default function MarkdownMessage({ content }) {
               >
                 {children}
               </code>
-            ),
+            );
+          },
           ul: ({ node, ...props }) => (
             <ul className="list-disc pl-5 my-1 space-y-0.5" {...props} />
           ),
