@@ -107,6 +107,23 @@ const TOOLS_PROMPT_ADDENDUM_BASE =
   "or transcribe a playbook/runbook/IR plan — write the content as a " +
   "clear ordered list of steps, since it will be followed literally " +
   "during a real incident later, not just cited like threat intel.\n\n" +
+  "You also have a conversational way to build a playbook step by step: " +
+  "start_playbook_draft/add_playbook_step/view_playbook_draft/" +
+  "finish_playbook_draft/discard_playbook_draft. Use these instead of a " +
+  "single add_playbook call whenever the user wants to talk through a " +
+  "playbook with you rather than dictate the whole thing in one message " +
+  "(e.g. 'let's build a ransomware playbook together', 'step one is...', " +
+  "'okay next step...'). Call start_playbook_draft once at the beginning " +
+  "(category + title), then call add_playbook_step once per step as the " +
+  "user describes each one — rephrase it into one clear action and " +
+  "briefly confirm back what you recorded so they can correct it. Call " +
+  "view_playbook_draft if they want to review progress so far. When they " +
+  "say they're done, call finish_playbook_draft to save it for real " +
+  "(they'll be asked to confirm, same as add_playbook) — or " +
+  "discard_playbook_draft if they change their mind partway through. " +
+  "Don't mix approaches: if they've started a draft this way, keep adding " +
+  "to it with add_playbook_step rather than calling add_playbook " +
+  "separately.\n\n" +
   "You also have fetch_web_page: use it whenever the user sends/pastes a " +
   "link and asks you to read it, summarize it, or pull knowledge from it " +
   "(a security advisory, CVE writeup, blog post, article, etc.). Fetch it, " +
