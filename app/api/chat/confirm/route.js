@@ -3,9 +3,10 @@
 // where the confirmation request originates.
 
 import { loadHistory, saveMessage } from "@/lib/conversations";
-import { describeToolCall, executeTool, parseArgs } from "@/lib/tools";
+import { describeToolCall } from "@/lib/tools";
 import { deletePending, getPending } from "@/lib/pendingToolCalls";
-import { callOllama, OLLAMA_HOST } from "@/lib/ollama";
+import { runToolLoop } from "@/lib/toolLoop";
+import { OLLAMA_HOST } from "@/lib/ollama";
 
 export async function POST(request) {
   const { pendingId, approve } = await request.json();
@@ -28,22 +29,6 @@ export async function POST(request) {
     return Response.json({ reply, conversationId });
   }
 
-  const toolResultMessages = [];
-  const summaries = [];
-  for (const tc of toolCalls) {
-    const name = tc.function?.name;
-    const args = parseArgs(tc.function?.arguments);
-    let content;
-    try {
-      const result = await executeTool(name, args, { conversationId });
-      content = JSON.stringify(result);
-    } catch (err) {
-      content = JSON.stringify({ error: err.message });
-    }
-    summaries.push(describeToolCall(name, args));
-    toolResultMessages.push({ role: "tool", content });
-  }
-
   // `messages` is the snapshot captured when the tool call was first proposed.
   // If another device (or tab) sent a new message to this same conversation
   // while this confirmation sat pending, that snapshot is now stale. Re-pull
@@ -53,16 +38,16 @@ export async function POST(request) {
   // depend on other devices.
   const systemMessage = messages[0]?.role === "system" ? [messages[0]] : [];
   const freshHistory = loadHistory(conversationId);
-  const followUpMessages = [
-    ...systemMessage,
-    ...freshHistory,
-    assistantToolMessage,
-    ...toolResultMessages,
-  ];
+  const freshMessages = [...systemMessage, ...freshHistory];
 
-  let data;
+  let loopResult;
   try {
-    data = await callOllama(followUpMessages, false, { model });
+    loopResult = await runToolLoop({
+      messages: freshMessages,
+      model,
+      conversationId,
+      firstRound: { assistantMessage: assistantToolMessage, toolCalls },
+    });
   } catch (err) {
     return Response.json(
       { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` },
@@ -70,12 +55,29 @@ export async function POST(request) {
     );
   }
 
-  const reply = (data.message?.content || "").trim() ||
+  // The approved tool(s) may have led the model to request *another* tool
+  // call that itself needs confirmation (e.g. a read-only lookup followed
+  // by a write) — surface that the same way the main chat route does
+  // instead of silently dropping it.
+  if (loopResult.needsConfirmation) {
+    return Response.json({
+      conversationId,
+      needsConfirmation: true,
+      pendingId: loopResult.pendingId,
+      toolCalls: loopResult.toolCalls.map((tc) => ({
+        name: tc.function?.name,
+        arguments: tc.function?.arguments,
+        description: describeToolCall(tc.function?.name, tc.function?.arguments),
+      })),
+    });
+  }
+
+  const reply = loopResult.content.trim() ||
     "Sorry, I didn't get anything back there — mind trying that again?";
   saveMessage(
     conversationId,
     "assistant",
-    `*(${summaries.join("; ")})*\n\n${reply}`
+    `*(${loopResult.summaries.join("; ")})*\n\n${reply}`
   );
   return Response.json({ reply, conversationId });
 }

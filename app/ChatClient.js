@@ -378,6 +378,22 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         ]);
         return;
       }
+
+      // Approving a tool call can lead the model to request *another* tool
+      // call that itself needs confirmation (e.g. a lookup followed by a
+      // write) — show that prompt too instead of rendering a blank reply.
+      if (data.needsConfirmation) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "confirm",
+            pendingId: data.pendingId,
+            toolCalls: data.toolCalls,
+          },
+        ]);
+        return;
+      }
+
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: data.reply },

@@ -6,13 +6,12 @@ import {
 } from "@/lib/conversations";
 import {
   describeToolCall,
-  executeTool,
   getToolDefinitions,
-  parseArgs,
   requiresConfirmation,
   toolsConfigured,
 } from "@/lib/tools";
 import { createPending } from "@/lib/pendingToolCalls";
+import { runToolLoop } from "@/lib/toolLoop";
 import { profilePromptAddendum } from "@/lib/profile";
 import { memoryPromptAddendum } from "@/lib/memory";
 import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP } from "@/lib/ollama";
@@ -451,36 +450,40 @@ export async function POST(request) {
 
     if (!anyNeedsConfirm) {
       // All requested tools are read-only lookups (list_reminders, get_news)
-      // — run them immediately, no confirmation needed.
-      const toolResultMessages = [];
-      const summaries = [];
-      for (const tc of toolCalls) {
-        const name = tc.function?.name;
-        const args = parseArgs(tc.function?.arguments);
-        let content;
-        try {
-          const result = await executeTool(name, args, { conversationId: convId });
-          content = JSON.stringify(result);
-        } catch (err) {
-          content = JSON.stringify({ error: err.message });
-        }
-        summaries.push(describeToolCall(name, args));
-        toolResultMessages.push({ role: "tool", content });
-      }
-
-      const followUp = [...messages, data.message, ...toolResultMessages];
-      let data2;
+      // — run them immediately, no confirmation needed. Keeps looping
+      // (tools still available on every follow-up) so the model can chain
+      // further tool calls off this one's results instead of being cut off
+      // after a single round — see lib/toolLoop.js for why that matters.
+      let loopResult;
       try {
-        data2 = await callOllama(followUp, false, { model });
+        loopResult = await runToolLoop({
+          messages,
+          model,
+          conversationId: convId,
+          firstRound: { assistantMessage: data.message, toolCalls },
+        });
       } catch (err) {
         return Response.json(
           { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` },
           { status: 502 }
         );
       }
-      const reply2 =
-        (data2.message?.content || "").trim() ||
-        emptyReplyFallback(convId, "follow-up");
+
+      if (loopResult.needsConfirmation) {
+        return Response.json({
+          conversationId: convId,
+          needsConfirmation: true,
+          pendingId: loopResult.pendingId,
+          tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
+          toolCalls: loopResult.toolCalls.map((tc) => ({
+            name: tc.function?.name,
+            arguments: tc.function?.arguments,
+            description: describeToolCall(tc.function?.name, tc.function?.arguments),
+          })),
+        });
+      }
+
+      const reply2 = loopResult.content.trim() || emptyReplyFallback(convId, "follow-up");
       saveMessage(convId, "assistant", reply2);
       return Response.json({
         reply: reply2,
