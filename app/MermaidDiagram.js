@@ -10,6 +10,37 @@
 
 import { useEffect, useId, useRef, useState } from "react";
 
+// The model doesn't reliably follow prompt instructions to quote node label
+// text containing special characters (parentheses, colons, etc.) inside
+// [...]/{...} shapes, e.g. `A[Header (Min 20 Bytes)]` — Mermaid's parser
+// treats "(" as meaningful shape syntax and fails with "Syntax error in
+// text". Rather than depend on prompt compliance, deterministically
+// auto-quote any bracketed label that contains risky characters and isn't
+// already quoted, before handing the code to mermaid.render().
+function sanitizeMermaidLabels(code) {
+  if (!code) return code;
+
+  const quoteInner = (inner) => {
+    const trimmed = inner.trim();
+    if (trimmed === "") return null;
+    if (/^".*"$/.test(trimmed)) return null; // already quoted
+    if (!/[():;,#{}<>]/.test(trimmed)) return null; // nothing risky, leave as-is
+    return trimmed.replace(/"/g, "'");
+  };
+
+  let result = code.replace(/\[([^[\]\n]*)\]/g, (match, inner) => {
+    const safe = quoteInner(inner);
+    return safe === null ? match : `["${safe}"]`;
+  });
+
+  result = result.replace(/\{([^{}\n]*)\}/g, (match, inner) => {
+    const safe = quoteInner(inner);
+    return safe === null ? match : `{"${safe}"}`;
+  });
+
+  return result;
+}
+
 let mermaidPromise = null;
 function loadMermaid() {
   if (!mermaidPromise) {
@@ -46,7 +77,7 @@ export default function MermaidDiagram({ code }) {
     async function render() {
       try {
         const mermaid = await loadMermaid();
-        const { svg } = await mermaid.render(`mermaid-${id}`, code.trim());
+        const { svg } = await mermaid.render(`mermaid-${id}`, sanitizeMermaidLabels(code.trim()));
         if (!cancelled && containerRef.current) {
           containerRef.current.innerHTML = svg;
           setError("");
