@@ -54,8 +54,11 @@ services:
       - SMTP_FROM=${SMTP_FROM}
       - LAIN_REMINDER_EMAIL_TO=${LAIN_REMINDER_EMAIL_TO}
       - LAIN_WIPE_PIN=${LAIN_WIPE_PIN:-0395}
+      - OBSIDIAN_VAULT_DIR=/vault
+      - OBSIDIAN_WRITE_SUBFOLDER=${OBSIDIAN_WRITE_SUBFOLDER:-Lain}
     volumes:
       - lain-data:/data
+      - ${OBSIDIAN_VAULT_PATH:-./data/obsidian-vault-placeholder}:/vault
 
 volumes:
   lain-data:

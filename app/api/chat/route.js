@@ -18,6 +18,7 @@ import { memoryPromptAddendum } from "@/lib/memory";
 import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP } from "@/lib/ollama";
 import { detectTone } from "@/lib/tone";
 import { shodanConfigured } from "@/lib/shodan";
+import { obsidianConfigured } from "@/lib/tools/obsidian";
 
 const TIMEZONE = process.env.LAIN_TIMEZONE || "America/Chicago";
 
@@ -179,6 +180,20 @@ const DIAGRAM_PROMPT_ADDENDUM =
   "visualize_memory_graph / visualize_reminders / visualize_tool_calls " +
   "(if available) and include the mermaid code block they return verbatim " +
   "in your reply, don't summarize it away as plain text.";
+
+const OBSIDIAN_PROMPT_ADDENDUM =
+  "\n\nYou also have direct access to the user's real local Obsidian " +
+  "vault (their personal notes): lookup_obsidian_note (search by title/" +
+  "content), read_obsidian_note (get a specific note's full content by " +
+  "path), and save_obsidian_note (write a new note or overwrite one you " +
+  "already created). Use lookup_obsidian_note whenever the user mentions " +
+  "'my notes', 'my vault', or asks you to check/recall something they " +
+  "wrote down in Obsidian — then read_obsidian_note on a promising match " +
+  "to get the full content before answering. Use save_obsidian_note " +
+  "whenever they ask you to write something down, save it, or add it to " +
+  "their notes/vault (it only ever writes inside a dedicated 'Lain' " +
+  "subfolder, never elsewhere in their vault, and requires their " +
+  "confirmation first).";
 
 const SHODAN_PROMPT_ADDENDUM =
   "\n\nYou also have Shodan.io tools: shodan_host_lookup (everything " +
@@ -365,6 +380,9 @@ export async function POST(request) {
   systemPrompt += DIAGRAM_PROMPT_ADDENDUM;
   if (shodanConfigured()) {
     systemPrompt += SHODAN_PROMPT_ADDENDUM;
+  }
+  if (obsidianConfigured()) {
+    systemPrompt += OBSIDIAN_PROMPT_ADDENDUM;
   }
   if (toolsConfigured()) {
     systemPrompt += LAPTOP_TOOLS_PROMPT_ADDENDUM;
