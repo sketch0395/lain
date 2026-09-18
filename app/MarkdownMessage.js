@@ -4,6 +4,24 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import MermaidDiagram from "./MermaidDiagram";
 
+// Local models don't always follow markdown-list instructions and
+// sometimes run several items together on one line separated by a "•"
+// character instead of real Markdown list syntax — that renders as an
+// unreadable wall of text. lib/briefing.js already fixes this up at
+// generation time for freshly-built digests, but that only covers new
+// messages; anything stored before that fix (or produced by some other
+// path that slips past the LLM's formatting instructions) still has the
+// raw "•" text sitting in the database. Doing it here too, at render
+// time, self-heals every message — old or new — regardless of source.
+function normalizeBulletFormatting(text) {
+  if (!text || !text.includes("•")) return text;
+  const parts = text.split("•").map((part) => part.trim()).filter(Boolean);
+  if (parts.length <= 1) return text;
+  const [intro, ...items] = parts;
+  const list = items.map((part) => `- ${part}`).join("\n");
+  return intro ? `${intro}\n\n${list}` : list;
+}
+
 /**
  * Renders assistant/user chat message content as Markdown (bold, italics,
  * headings, lists, links, code, tables via remark-gfm) instead of raw
@@ -87,7 +105,7 @@ export default function MarkdownMessage({ content }) {
           ),
         }}
       >
-        {content}
+        {normalizeBulletFormatting(content)}
       </ReactMarkdown>
     </div>
   );
