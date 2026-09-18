@@ -27,6 +27,12 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 
+# Next's standalone output file-tracing doesn't always pull in every file
+# of a dependency it detects as used (adm-zip's non-index files were
+# getting dropped, leaving only its util/ subfolder) — copy it in whole
+# from the full install to guarantee it works regardless of tracing quirks.
+COPY --from=builder /app/node_modules/adm-zip ./node_modules/adm-zip
+
 RUN mkdir -p /data && chown -R lain:lain /data /app
 USER lain
 

@@ -10,7 +10,7 @@
 // and Lain will use it. Talks to /api/playbooks.
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 const EMPTY_FORM = { category: "", title: "", content: "", tags: "" };
 
@@ -26,10 +26,42 @@ export default function PlaybooksPage() {
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     load();
   }, []);
+
+  function downloadUrl(params) {
+    const qs = new URLSearchParams(params).toString();
+    return `/api/playbooks/export${qs ? `?${qs}` : ""}`;
+  }
+
+  async function handleImportFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+    setImporting(true);
+    setImportMsg("");
+    setError("");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      const res = await fetch("/api/playbooks/import", { method: "POST", body });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Import failed");
+      setImportMsg(
+        `Imported ${data.imported.length} playbook${data.imported.length === 1 ? "" : "s"}` +
+          (data.errors?.length ? ` (${data.errors.length} skipped)` : "")
+      );
+      await load();
+    } catch (err) {
+      setError(err.message || "Couldn't import that file.");
+    }
+    setImporting(false);
+  }
 
   async function load() {
     setLoading(true);
@@ -175,13 +207,40 @@ export default function PlaybooksPage() {
             📘 Incident Response Playbooks
           </h1>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowAddForm((v) => !v)}
-          className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40 shrink-0"
-        >
-          {showAddForm ? "Cancel" : "+ New Playbook"}
-        </button>
+        <div className="flex items-center gap-2 shrink-0">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".md,.zip,text/markdown,application/zip"
+            onChange={handleImportFile}
+            className="hidden"
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={importing}
+            title="Import a .md file or a .zip of .md files"
+            className="rounded-lg bg-[var(--lain-panel-alt)] hover:bg-[var(--lain-panel)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-border)] disabled:opacity-50"
+          >
+            {importing ? "Importing…" : "⬆ Import"}
+          </button>
+          {entries.length > 0 && (
+            <a
+              href={downloadUrl({})}
+              title="Download every playbook as a .zip of .md files"
+              className="rounded-lg bg-[var(--lain-panel-alt)] hover:bg-[var(--lain-panel)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-border)]"
+            >
+              ⬇ Export All
+            </a>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowAddForm((v) => !v)}
+            className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40"
+          >
+            {showAddForm ? "Cancel" : "+ New Playbook"}
+          </button>
+        </div>
       </header>
 
       <p className="px-4 pt-3 text-xs text-[var(--lain-muted)]">
@@ -246,6 +305,7 @@ export default function PlaybooksPage() {
       )}
 
       {error && <p className="px-4 pt-2 text-xs text-[var(--lain-accent-light)]">{error}</p>}
+      {importMsg && <p className="px-4 pt-2 text-xs text-[var(--lain-muted)]">{importMsg}</p>}
 
       <div className="px-4 pt-3 pb-2 shrink-0">
         <input
@@ -272,23 +332,36 @@ export default function PlaybooksPage() {
               const count = tree.get(category).length;
               const active = category === selectedCategory;
               return (
-                <button
+                <div
                   key={category}
-                  type="button"
-                  onClick={() => {
-                    setSelectedCategory(category);
-                    setSelectedId(null);
-                    setEditing(false);
-                  }}
-                  className={`w-full flex items-center justify-between gap-2 px-3 py-2 text-left text-sm border-l-2 ${
+                  className={`w-full flex items-center gap-1 pr-1 border-l-2 ${
                     active
-                      ? "border-[var(--lain-accent)] bg-[var(--lain-panel-alt)] text-[var(--lain-text)]"
-                      : "border-transparent text-[var(--lain-muted)] hover:bg-[var(--lain-panel)] hover:text-[var(--lain-text)]"
+                      ? "border-[var(--lain-accent)] bg-[var(--lain-panel-alt)]"
+                      : "border-transparent hover:bg-[var(--lain-panel)]"
                   }`}
                 >
-                  <span className="truncate">📁 {category}</span>
-                  <span className="text-[10px] opacity-60 shrink-0">{count}</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedCategory(category);
+                      setSelectedId(null);
+                      setEditing(false);
+                    }}
+                    className={`flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm ${
+                      active ? "text-[var(--lain-text)]" : "text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+                    }`}
+                  >
+                    <span className="truncate">📁 {category}</span>
+                    <span className="text-[10px] opacity-60 shrink-0">{count}</span>
+                  </button>
+                  <a
+                    href={downloadUrl({ category })}
+                    title={`Export "${category}" as a .zip`}
+                    className="shrink-0 text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] px-1"
+                  >
+                    ⬇
+                  </a>
+                </div>
               );
             })}
           </div>
@@ -385,6 +458,13 @@ export default function PlaybooksPage() {
                     </h2>
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    <a
+                      href={downloadUrl({ id: selectedEntry.id })}
+                      title="Export this playbook as a .md file"
+                      className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] border border-[var(--lain-border)] rounded-lg px-2 py-1"
+                    >
+                      Export
+                    </a>
                     <button
                       type="button"
                       onClick={() => startEdit(selectedEntry)}
