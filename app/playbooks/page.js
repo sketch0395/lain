@@ -12,7 +12,113 @@
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const EMPTY_FORM = { category: "", title: "", content: "", tags: "", requiresReport: false };
+// Mirrors tools-agent/shared/tools/playbooks.js's DEFAULT_PLAYBOOK_SECTIONS /
+// splitPlaybookSections / joinPlaybookSections — duplicated here (rather
+// than imported) so this client bundle doesn't pull in the whole shared
+// tool module just for three small string-manipulation helpers. Keep this
+// in sync with that file if the "## Section Title" convention ever changes.
+const DEFAULT_PLAYBOOK_SECTIONS = [
+  "Preparation",
+  "Identification",
+  "Containment",
+  "Remediation",
+  "Recovery",
+  "Aftermath",
+];
+
+function emptySections() {
+  return DEFAULT_PLAYBOOK_SECTIONS.map((title) => ({ title, content: "" }));
+}
+
+function splitPlaybookSections(content) {
+  const text = String(content || "").replace(/\r\n/g, "\n").trim();
+  if (!text) return [{ title: "", content: "" }];
+  const headingRe = /^##\s+(.+?)\s*$/gm;
+  const matches = [...text.matchAll(headingRe)];
+  if (matches.length === 0) return [{ title: "", content: text }];
+  const sections = [];
+  const preamble = text.slice(0, matches[0].index).trim();
+  if (preamble) sections.push({ title: "", content: preamble });
+  for (let i = 0; i < matches.length; i++) {
+    const start = matches[i].index + matches[i][0].length;
+    const end = i + 1 < matches.length ? matches[i + 1].index : text.length;
+    sections.push({ title: matches[i][1].trim(), content: text.slice(start, end).trim() });
+  }
+  return sections;
+}
+
+function joinPlaybookSections(sections) {
+  return (sections || [])
+    .map((s) => {
+      const title = String(s?.title || "").trim();
+      const body = String(s?.content || "").trim();
+      if (!title && !body) return "";
+      return title ? `## ${title}\n\n${body}` : body;
+    })
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function emptyForm() {
+  return { category: "", title: "", sections: emptySections(), tags: "", requiresReport: false };
+}
+
+// Editor for a playbook's sections: each is a named phase (Preparation,
+// Identification, ...) with its own steps, plus a free "+ Add section"
+// button for anything that doesn't fit the standard phases. Shared by both
+// the add and edit forms below.
+function SectionsEditor({ sections, onChange }) {
+  function updateSection(i, patch) {
+    onChange(sections.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  }
+  function removeSection(i) {
+    onChange(sections.filter((_, idx) => idx !== i));
+  }
+  function addSection() {
+    onChange([...sections, { title: "", content: "" }]);
+  }
+  return (
+    <div className="space-y-2">
+      {sections.map((s, i) => (
+        <div
+          key={i}
+          className="border border-[var(--lain-border)] rounded-lg p-2 space-y-1.5 bg-[var(--lain-panel-alt)]"
+        >
+          <div className="flex items-center gap-2">
+            <input
+              value={s.title}
+              onChange={(e) => updateSection(i, { title: e.target.value })}
+              placeholder="Section title (e.g. Preparation) — leave blank for unsectioned"
+              className="flex-1 bg-transparent border border-[var(--lain-border)] rounded px-2 py-1 text-xs font-semibold text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] placeholder:font-normal focus:outline-none focus:ring-1 focus:ring-[var(--lain-highlight)]"
+            />
+            <button
+              type="button"
+              onClick={() => removeSection(i)}
+              title="Remove this section"
+              className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] shrink-0 px-1"
+            >
+              ✕
+            </button>
+          </div>
+          <textarea
+            value={s.content}
+            onChange={(e) => updateSection(i, { content: e.target.value })}
+            placeholder={"Steps for this section, numbered in order:\n1. ...\n2. ..."}
+            rows={4}
+            className="w-full bg-[var(--lain-panel)] border border-[var(--lain-border)] rounded px-2 py-1.5 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--lain-highlight)]"
+          />
+        </div>
+      ))}
+      <button
+        type="button"
+        onClick={addSection}
+        className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-text)] border border-dashed border-[var(--lain-border)] rounded-lg px-3 py-1.5 w-full"
+      >
+        + Add section
+      </button>
+    </div>
+  );
+}
 
 export default function PlaybooksPage() {
   const [entries, setEntries] = useState([]);
@@ -22,10 +128,10 @@ export default function PlaybooksPage() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [form, setForm] = useState(EMPTY_FORM);
+  const [form, setForm] = useState(emptyForm());
   const [saving, setSaving] = useState(false);
   const [editing, setEditing] = useState(false);
-  const [editForm, setEditForm] = useState(EMPTY_FORM);
+  const [editForm, setEditForm] = useState(emptyForm());
   const [importing, setImporting] = useState(false);
   const [importMsg, setImportMsg] = useState("");
   const fileInputRef = useRef(null);
@@ -77,7 +183,8 @@ export default function PlaybooksPage() {
 
   async function addEntry(e) {
     e.preventDefault();
-    if (!form.category.trim() || !form.title.trim() || !form.content.trim()) return;
+    const content = joinPlaybookSections(form.sections);
+    if (!form.category.trim() || !form.title.trim() || !content.trim()) return;
     setSaving(true);
     setError("");
     try {
@@ -87,14 +194,14 @@ export default function PlaybooksPage() {
         body: JSON.stringify({
           category: form.category.trim(),
           title: form.title.trim(),
-          content: form.content.trim(),
+          content,
           tags: form.tags.trim(),
           requiresReport: form.requiresReport,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
       const { entry } = await res.json();
-      setForm(EMPTY_FORM);
+      setForm(emptyForm());
       setShowAddForm(false);
       await load();
       if (entry) {
@@ -111,7 +218,7 @@ export default function PlaybooksPage() {
     setEditForm({
       category: entry.category,
       title: entry.title,
-      content: entry.content,
+      sections: splitPlaybookSections(entry.content),
       tags: entry.tags || "",
       requiresReport: !!entry.requires_report,
     });
@@ -119,7 +226,8 @@ export default function PlaybooksPage() {
   }
 
   async function saveEdit(entry) {
-    if (!editForm.category.trim() || !editForm.title.trim() || !editForm.content.trim()) return;
+    const content = joinPlaybookSections(editForm.sections);
+    if (!editForm.category.trim() || !editForm.title.trim() || !content.trim()) return;
     setSaving(true);
     setError("");
     try {
@@ -129,7 +237,7 @@ export default function PlaybooksPage() {
         body: JSON.stringify({
           category: editForm.category.trim(),
           title: editForm.title.trim(),
-          content: editForm.content.trim(),
+          content,
           tags: editForm.tags.trim(),
           requiresReport: editForm.requiresReport,
         }),
@@ -280,12 +388,9 @@ export default function PlaybooksPage() {
               className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
             />
           </div>
-          <textarea
-            value={form.content}
-            onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-            placeholder={"Steps, numbered in order:\n1. Detect...\n2. Contain...\n3. Eradicate...\n4. Recover...\n5. Lessons learned..."}
-            rows={8}
-            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+          <SectionsEditor
+            sections={form.sections}
+            onChange={(sections) => setForm((f) => ({ ...f, sections }))}
           />
           <div className="flex items-center gap-2">
             <label className="flex items-center gap-1.5 text-xs text-[var(--lain-muted)]">
@@ -307,7 +412,10 @@ export default function PlaybooksPage() {
             <button
               type="submit"
               disabled={
-                saving || !form.category.trim() || !form.title.trim() || !form.content.trim()
+                saving ||
+                !form.category.trim() ||
+                !form.title.trim() ||
+                !joinPlaybookSections(form.sections).trim()
               }
               className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
             >
@@ -429,11 +537,9 @@ export default function PlaybooksPage() {
                     className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
                   />
                 </div>
-                <textarea
-                  value={editForm.content}
-                  onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
-                  rows={12}
-                  className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                <SectionsEditor
+                  sections={editForm.sections}
+                  onChange={(sections) => setEditForm((f) => ({ ...f, sections }))}
                 />
                 <input
                   value={editForm.tags}
@@ -453,7 +559,12 @@ export default function PlaybooksPage() {
                   <button
                     type="button"
                     onClick={() => saveEdit(selectedEntry)}
-                    disabled={saving}
+                    disabled={
+                      saving ||
+                      !editForm.category.trim() ||
+                      !editForm.title.trim() ||
+                      !joinPlaybookSections(editForm.sections).trim()
+                    }
                     className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
                   >
                     Save changes
@@ -507,9 +618,20 @@ export default function PlaybooksPage() {
                     </button>
                   </div>
                 </div>
-                <p className="text-sm text-[var(--lain-text)] whitespace-pre-wrap leading-relaxed">
-                  {selectedEntry.content}
-                </p>
+                <div className="space-y-3">
+                  {splitPlaybookSections(selectedEntry.content).map((s, i) => (
+                    <div key={i}>
+                      {s.title && (
+                        <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--lain-highlight)] mb-1">
+                          {s.title}
+                        </h3>
+                      )}
+                      <p className="text-sm text-[var(--lain-text)] whitespace-pre-wrap leading-relaxed">
+                        {s.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
                 {selectedEntry.tags && (
                   <div className="flex flex-wrap gap-1.5 pt-1">
                     {selectedEntry.tags.split(",").map((t) => t.trim()).filter(Boolean).map((t) => (
