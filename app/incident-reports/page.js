@@ -1,25 +1,24 @@
 "use client";
 
-// Incident Response Playbook library — modeled directly on the Threat
-// Intel page (app/threat-intel/page.js): a dedicated page presented like
-// a file directory (categories are folders, titles are files, content is
-// a preview pane). Playbooks are step-by-step runbooks Lain follows when
-// the user calls out an active/suspected security incident (see
-// lookup_playbook/add_playbook in lib/tools/cyberIntel.js). This page is
-// the human-curated, browsable side — write or transcribe a playbook here
-// and Lain will use it. Talks to /api/playbooks.
+// Incident Report library — companion to the Playbooks page
+// (app/playbooks/page.js): where Playbooks are the reference library of
+// what to do during a security incident, this is the saved record of
+// what actually happened. Lain compiles these automatically at the end of
+// a tracked incident (see finish_incident_report in
+// tools-agent/shared/tools/incidentReports.js) when the playbook that was
+// followed is flagged "requires a report" — they can also be written
+// here directly. Talks to /api/incident-reports.
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 
-const EMPTY_FORM = { category: "", title: "", content: "", tags: "", requiresReport: false };
+const EMPTY_FORM = { title: "", category: "", playbook_title: "", content: "", tags: "" };
 
-export default function PlaybooksPage() {
+export default function IncidentReportsPage() {
   const [entries, setEntries] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -36,12 +35,24 @@ export default function PlaybooksPage() {
 
   function downloadUrl(params) {
     const qs = new URLSearchParams(params).toString();
-    return `/api/playbooks/export${qs ? `?${qs}` : ""}`;
+    return `/api/incident-reports/export${qs ? `?${qs}` : ""}`;
+  }
+
+  async function load() {
+    setLoading(true);
+    try {
+      const res = await fetch("/api/incident-reports");
+      const data = await res.json();
+      setEntries(data.entries || []);
+    } catch {
+      setError("Couldn't load incident reports.");
+    }
+    setLoading(false);
   }
 
   async function handleImportFile(e) {
     const file = e.target.files?.[0];
-    e.target.value = ""; // allow re-selecting the same file later
+    e.target.value = "";
     if (!file) return;
     setImporting(true);
     setImportMsg("");
@@ -49,11 +60,11 @@ export default function PlaybooksPage() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const res = await fetch("/api/playbooks/import", { method: "POST", body });
+      const res = await fetch("/api/incident-reports/import", { method: "POST", body });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error || "Import failed");
       setImportMsg(
-        `Imported ${data.imported.length} playbook${data.imported.length === 1 ? "" : "s"}` +
+        `Imported ${data.imported.length} report${data.imported.length === 1 ? "" : "s"}` +
           (data.errors?.length ? ` (${data.errors.length} skipped)` : "")
       );
       await load();
@@ -63,33 +74,21 @@ export default function PlaybooksPage() {
     setImporting(false);
   }
 
-  async function load() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/playbooks");
-      const data = await res.json();
-      setEntries(data.entries || []);
-    } catch {
-      setError("Couldn't load the playbook library.");
-    }
-    setLoading(false);
-  }
-
   async function addEntry(e) {
     e.preventDefault();
-    if (!form.category.trim() || !form.title.trim() || !form.content.trim()) return;
+    if (!form.title.trim() || !form.content.trim()) return;
     setSaving(true);
     setError("");
     try {
-      const res = await fetch("/api/playbooks", {
+      const res = await fetch("/api/incident-reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category: form.category.trim(),
           title: form.title.trim(),
+          category: form.category.trim(),
+          playbookTitle: form.playbook_title.trim(),
           content: form.content.trim(),
           tags: form.tags.trim(),
-          requiresReport: form.requiresReport,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
@@ -97,51 +96,43 @@ export default function PlaybooksPage() {
       setForm(EMPTY_FORM);
       setShowAddForm(false);
       await load();
-      if (entry) {
-        setSelectedCategory(entry.category);
-        setSelectedId(entry.id);
-      }
+      if (entry) setSelectedId(entry.id);
     } catch {
-      setError("Couldn't save that playbook.");
+      setError("Couldn't save that report.");
     }
     setSaving(false);
   }
 
   function startEdit(entry) {
     setEditForm({
-      category: entry.category,
       title: entry.title,
+      category: entry.category || "",
+      playbook_title: entry.playbook_title || "",
       content: entry.content,
       tags: entry.tags || "",
-      requiresReport: !!entry.requires_report,
     });
     setEditing(true);
   }
 
   async function saveEdit(entry) {
-    if (!editForm.category.trim() || !editForm.title.trim() || !editForm.content.trim()) return;
+    if (!editForm.title.trim() || !editForm.content.trim()) return;
     setSaving(true);
     setError("");
     try {
-      const res = await fetch(`/api/playbooks/${entry.id}`, {
+      const res = await fetch(`/api/incident-reports/${entry.id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          category: editForm.category.trim(),
           title: editForm.title.trim(),
+          category: editForm.category.trim(),
+          playbookTitle: editForm.playbook_title.trim(),
           content: editForm.content.trim(),
           tags: editForm.tags.trim(),
-          requiresReport: editForm.requiresReport,
         }),
       });
       if (!res.ok) throw new Error("Save failed");
-      const { entry: updated } = await res.json();
       setEditing(false);
       await load();
-      if (updated) {
-        setSelectedCategory(updated.category);
-        setSelectedId(updated.id);
-      }
     } catch {
       setError("Couldn't save those changes.");
     }
@@ -155,45 +146,28 @@ export default function PlaybooksPage() {
       setEditing(false);
     }
     try {
-      await fetch(`/api/playbooks/${id}`, { method: "DELETE" });
+      await fetch(`/api/incident-reports/${id}`, { method: "DELETE" });
     } catch {
       setError("Couldn't delete that — refreshing.");
       load();
     }
   }
 
-  // Filtered set (search matches title/category/tags), then grouped into a
-  // folder-tree shape: { category -> [entries] }.
-  const { tree, categoryOrder } = useMemo(() => {
+  const filtered = useMemo(() => {
     const needle = filter.trim().toLowerCase();
-    const filtered = needle
+    const list = needle
       ? entries.filter(
           (e) =>
             e.title.toLowerCase().includes(needle) ||
-            e.category.toLowerCase().includes(needle) ||
+            (e.category || "").toLowerCase().includes(needle) ||
+            (e.playbook_title || "").toLowerCase().includes(needle) ||
             (e.tags || "").toLowerCase().includes(needle)
         )
       : entries;
-    const byCategory = new Map();
-    for (const e of filtered) {
-      if (!byCategory.has(e.category)) byCategory.set(e.category, []);
-      byCategory.get(e.category).push(e);
-    }
-    for (const list of byCategory.values()) {
-      list.sort((a, b) => a.title.localeCompare(b.title));
-    }
-    const order = [...byCategory.keys()].sort((a, b) => a.localeCompare(b));
-    return { tree: byCategory, categoryOrder: order };
+    return [...list].sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
   }, [entries, filter]);
 
-  // Category may have been deleted/filtered out from under the current
-  // selection — derive the effective category instead of syncing it back
-  // with a setState-in-effect (an unnecessary render-cascade pattern).
-  const effectiveCategory =
-    selectedCategory && tree.has(selectedCategory) ? selectedCategory : null;
-
-  const titlesInCategory = effectiveCategory ? tree.get(effectiveCategory) || [] : [];
-  const selectedEntry = titlesInCategory.find((e) => e.id === selectedId) || null;
+  const selectedEntry = filtered.find((e) => e.id === selectedId) || null;
 
   return (
     <div className="h-dvh flex flex-col bg-[var(--lain-bg)] text-[var(--lain-text)]">
@@ -207,7 +181,7 @@ export default function PlaybooksPage() {
             ←
           </Link>
           <h1 className="text-lg font-bold bg-gradient-to-r from-[var(--lain-accent-light)] to-[var(--lain-highlight-soft)] bg-clip-text text-transparent truncate">
-            📘 Incident Response Playbooks
+            📝 Incident Reports
           </h1>
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -230,7 +204,7 @@ export default function PlaybooksPage() {
           {entries.length > 0 && (
             <a
               href={downloadUrl({})}
-              title="Download every playbook as a .zip of .md files"
+              title="Download every report as a .zip of .md files"
               className="rounded-lg bg-[var(--lain-panel-alt)] hover:bg-[var(--lain-panel)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-border)]"
             >
               ⬇ Export All
@@ -241,18 +215,16 @@ export default function PlaybooksPage() {
             onClick={() => setShowAddForm((v) => !v)}
             className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-1.5 text-sm font-semibold border border-[var(--lain-highlight)]/40"
           >
-            {showAddForm ? "Cancel" : "+ New Playbook"}
+            {showAddForm ? "Cancel" : "+ New Report"}
           </button>
         </div>
       </header>
 
       <p className="px-4 pt-3 text-xs text-[var(--lain-muted)]">
-        Step-by-step runbooks for handling specific security incidents —
-        phishing reports, ransomware, account compromise, data exfiltration,
-        malware infections, and anything else worth having on hand. When you
-        describe an active incident in chat, Lain looks here first and
-        follows the matching playbook. Browse it like a file tree: pick a
-        category folder, then a title.
+        Finished write-ups of real incidents — what happened, what was
+        found, what was done about it, and lessons learned. Lain compiles
+        these automatically when she finishes following a playbook flagged
+        to require one; you can also write one directly here.
       </p>
 
       {showAddForm && (
@@ -262,41 +234,31 @@ export default function PlaybooksPage() {
         >
           <div className="grid grid-cols-2 gap-2">
             <input
+              value={form.title}
+              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
+              placeholder="Title (e.g. Ransomware — Finance Workstation)"
+              className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+            />
+            <input
               value={form.category}
               onChange={(e) => setForm((f) => ({ ...f, category: e.target.value }))}
               placeholder="Category (e.g. ransomware)"
-              list="playbook-categories"
-              className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
-            />
-            <datalist id="playbook-categories">
-              {categoryOrder.map((c) => (
-                <option key={c} value={c} />
-              ))}
-            </datalist>
-            <input
-              value={form.title}
-              onChange={(e) => setForm((f) => ({ ...f, title: e.target.value }))}
-              placeholder="Title (e.g. Suspected Phishing Email)"
               className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
             />
           </div>
+          <input
+            value={form.playbook_title}
+            onChange={(e) => setForm((f) => ({ ...f, playbook_title: e.target.value }))}
+            placeholder="Playbook followed (optional)"
+            className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+          />
           <textarea
             value={form.content}
             onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))}
-            placeholder={"Steps, numbered in order:\n1. Detect...\n2. Contain...\n3. Eradicate...\n4. Recover...\n5. Lessons learned..."}
-            rows={8}
+            placeholder={"Report body (Markdown) — summary, timeline, steps taken, findings, actions, lessons learned…"}
+            rows={10}
             className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
           />
-          <div className="flex items-center gap-2">
-            <label className="flex items-center gap-1.5 text-xs text-[var(--lain-muted)]">
-              <input
-                type="checkbox"
-                checked={form.requiresReport}
-                onChange={(e) => setForm((f) => ({ ...f, requiresReport: e.target.checked }))}
-              />
-              Requires an incident report when followed
-            </label>
-          </div>
           <div className="flex gap-2">
             <input
               value={form.tags}
@@ -306,9 +268,7 @@ export default function PlaybooksPage() {
             />
             <button
               type="submit"
-              disabled={
-                saving || !form.category.trim() || !form.title.trim() || !form.content.trim()
-              }
+              disabled={saving || !form.title.trim() || !form.content.trim()}
               className="rounded-lg bg-[var(--lain-accent)] hover:bg-[var(--lain-accent-light)] px-3 py-2 text-sm font-semibold border border-[var(--lain-highlight)]/40 disabled:opacity-50"
             >
               Save
@@ -324,29 +284,28 @@ export default function PlaybooksPage() {
         <input
           value={filter}
           onChange={(e) => setFilter(e.target.value)}
-          placeholder="Filter by title/category/tag…"
+          placeholder="Filter by title/category/playbook/tag…"
           className="w-full max-w-md bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
         />
       </div>
 
       {loading ? (
         <p className="px-4 text-sm text-[var(--lain-muted)]">Loading…</p>
-      ) : categoryOrder.length === 0 ? (
+      ) : filtered.length === 0 ? (
         <p className="px-4 text-sm text-[var(--lain-muted)]">
-          Nothing here yet — add a playbook above (start with the incidents
-          you&apos;re most likely to face: phishing, ransomware, account
-          compromise).
+          No incident reports yet — they&apos;ll show up here once one is
+          written, either by finishing a tracked incident in chat or
+          adding one directly above.
         </p>
       ) : (
         <div className="flex-1 min-h-0 flex flex-col md:flex-row border-t border-[var(--lain-border)]">
-          {/* Column 1: Categories (folders) */}
-          <div className="md:w-56 shrink-0 border-b md:border-b-0 md:border-r border-[var(--lain-border)] overflow-y-auto max-h-40 md:max-h-none">
-            {categoryOrder.map((category) => {
-              const count = tree.get(category).length;
-              const active = category === selectedCategory;
+          {/* Column 1: report list */}
+          <div className="md:w-72 shrink-0 border-b md:border-b-0 md:border-r border-[var(--lain-border)] overflow-y-auto max-h-52 md:max-h-none">
+            {filtered.map((e) => {
+              const active = e.id === selectedId;
               return (
                 <div
-                  key={category}
+                  key={e.id}
                   className={`w-full flex items-center gap-1 pr-1 border-l-2 ${
                     active
                       ? "border-[var(--lain-accent)] bg-[var(--lain-panel-alt)]"
@@ -356,20 +315,22 @@ export default function PlaybooksPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      setSelectedCategory(category);
-                      setSelectedId(null);
+                      setSelectedId(e.id);
                       setEditing(false);
                     }}
-                    className={`flex-1 min-w-0 flex items-center justify-between gap-2 px-3 py-2 text-left text-sm ${
+                    className={`flex-1 min-w-0 text-left px-3 py-2 text-sm ${
                       active ? "text-[var(--lain-text)]" : "text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
                     }`}
                   >
-                    <span className="truncate">📁 {category}</span>
-                    <span className="text-[10px] opacity-60 shrink-0">{count}</span>
+                    <span className="block truncate">📄 {e.title}</span>
+                    <span className="block text-[10px] opacity-60 truncate">
+                      {e.category || "uncategorized"}
+                      {e.created_at ? ` · ${new Date(e.created_at).toLocaleDateString()}` : ""}
+                    </span>
                   </button>
                   <a
-                    href={downloadUrl({ category })}
-                    title={`Export "${category}" as a .zip`}
+                    href={downloadUrl({ id: e.id })}
+                    title="Export this report as a .md file"
                     className="shrink-0 text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] px-1"
                   >
                     ⬇
@@ -379,60 +340,36 @@ export default function PlaybooksPage() {
             })}
           </div>
 
-          {/* Column 2: Titles (files) within the selected category */}
-          <div className="md:w-64 shrink-0 border-b md:border-b-0 md:border-r border-[var(--lain-border)] overflow-y-auto max-h-52 md:max-h-none">
-            {!selectedCategory ? (
-              <p className="p-3 text-xs text-[var(--lain-muted)]">
-                ← Select a category folder to see its playbooks.
-              </p>
-            ) : (
-              titlesInCategory.map((e) => {
-                const active = e.id === selectedId;
-                return (
-                  <button
-                    key={e.id}
-                    type="button"
-                    onClick={() => {
-                      setSelectedId(e.id);
-                      setEditing(false);
-                    }}
-                    className={`w-full flex items-center gap-2 px-3 py-2 text-left text-sm border-l-2 ${
-                      active
-                        ? "border-[var(--lain-highlight)] bg-[var(--lain-panel-alt)] text-[var(--lain-text)]"
-                        : "border-transparent text-[var(--lain-muted)] hover:bg-[var(--lain-panel)] hover:text-[var(--lain-text)]"
-                    }`}
-                  >
-                    <span className="truncate">📄 {e.title}</span>
-                  </button>
-                );
-              })
-            )}
-          </div>
-
-          {/* Column 3: Content preview / edit */}
+          {/* Column 2: content preview / edit */}
           <div className="flex-1 min-h-0 overflow-y-auto p-4">
             {!selectedEntry ? (
               <p className="text-sm text-[var(--lain-muted)]">
-                ← Select a playbook to view its steps.
+                ← Select a report to view it.
               </p>
             ) : editing ? (
               <div className="space-y-2 max-w-3xl">
                 <div className="grid grid-cols-2 gap-2">
                   <input
-                    value={editForm.category}
-                    onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
-                    className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
-                  />
-                  <input
                     value={editForm.title}
                     onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))}
                     className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
                   />
+                  <input
+                    value={editForm.category}
+                    onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value }))}
+                    className="bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                  />
                 </div>
+                <input
+                  value={editForm.playbook_title}
+                  onChange={(e) => setEditForm((f) => ({ ...f, playbook_title: e.target.value }))}
+                  placeholder="Playbook followed"
+                  className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
+                />
                 <textarea
                   value={editForm.content}
                   onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
-                  rows={12}
+                  rows={16}
                   className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
                 />
                 <input
@@ -441,14 +378,6 @@ export default function PlaybooksPage() {
                   placeholder="Tags, comma separated"
                   className="w-full bg-[var(--lain-panel-alt)] border border-[var(--lain-border)] rounded-lg px-3 py-2 text-sm text-[var(--lain-text)] placeholder:text-[var(--lain-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--lain-highlight)]"
                 />
-                <label className="flex items-center gap-1.5 text-xs text-[var(--lain-muted)]">
-                  <input
-                    type="checkbox"
-                    checked={editForm.requiresReport}
-                    onChange={(e) => setEditForm((f) => ({ ...f, requiresReport: e.target.checked }))}
-                  />
-                  Requires an incident report when followed
-                </label>
                 <div className="flex gap-2">
                   <button
                     type="button"
@@ -472,21 +401,17 @@ export default function PlaybooksPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <p className="text-[10px] uppercase tracking-wide text-[var(--lain-muted)]">
-                      {selectedEntry.category}
+                      {selectedEntry.category || "uncategorized"}
+                      {selectedEntry.playbook_title ? ` · ${selectedEntry.playbook_title}` : ""}
                     </p>
                     <h2 className="text-base font-semibold text-[var(--lain-text)]">
                       {selectedEntry.title}
                     </h2>
-                    {!!selectedEntry.requires_report && (
-                      <span className="inline-block mt-1 text-[10px] px-2 py-0.5 rounded-full bg-[var(--lain-highlight)]/20 border border-[var(--lain-highlight)]/40 text-[var(--lain-highlight)]">
-                        📝 Requires incident report
-                      </span>
-                    )}
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <a
                       href={downloadUrl({ id: selectedEntry.id })}
-                      title="Export this playbook as a .md file"
+                      title="Export this report as a .md file"
                       className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] border border-[var(--lain-border)] rounded-lg px-2 py-1"
                     >
                       Export
