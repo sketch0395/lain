@@ -60,11 +60,47 @@ in sync with what's actually callable.
   App-specific wiring (`lib/tools/*.js`, `lib/promptSkills.js`,
   `app/api/chat/route.js`) stays per-app since personality/branding/env
   var names (`LAIN_*` vs `ASUNA_*`) differ.
+- The submodule has **two distinct layers that share base filenames by
+  coincidence — don't confuse them:**
+  - `tools-agent/shared/tools/*.js` — either the tools-agent **server's**
+    own implementation (`network.js`, `forensics.js`, `diagnostics.js`,
+    `omarchy.js`; consumed by `tools-agent/server.js` via
+    `registerRoutes(router, opts)`), or purely-cloud-side business logic
+    consumed directly by the Next.js app (`playbooks.js`, `threatIntel.js`,
+    `toolCallLog.js`, `notes.js`, `webFetch.js`, `cyberNews.js`, etc.).
+  - `tools-agent/shared/app-tools/*.js` — the **app-side** Ollama tool
+    schema + HTTP-dispatch layer (same base names as the server-side
+    files above, e.g. `network.js`, but a totally different module) that
+    each host project's `lib/tools/*.js` imports directly. These need
+    host-specific config (httpClient URL/token env vars, Shodan adapter,
+    `getRecentToolCalls`), which is **never imported statically** inside
+    `app-tools/` — it's injected via an extra `deps` argument to
+    `execute()` (and sometimes `getDefinitions()`), so the module itself
+    stays host-agnostic. See `app-tools/network.js` for the pattern.
+  - When adding a new always-identical-between-apps `lib/tools/*.js`
+    module (or extending an existing shared one), prefer moving/adding it
+    to `app-tools/` with DI over leaving it duplicated per-app — but only
+    if its host-specific dependency surface is small (1-3 injected
+    functions). If a module would need many injected functions (it's
+    mostly *wiring*, not reusable logic — e.g. `registry.js`,
+    `cyberIntel.js`), leave it per-app instead; forcing DI there just
+    adds indirection without reducing real duplication risk.
+- Files that **must stay per-app but should stay byte-for-byte identical
+  otherwise** (diff before/after any change to one, and port the same
+  change to the other): `lib/tools/registry.js`, `lib/tools/cyberIntel.js`.
+  Files that are per-app **and expected to differ** (don't try to
+  reconcile these): `lib/tools/httpClient.js` (env var names only),
+  `lib/tools/core.js`, `lib/tools/obsidian.js`, `lib/tools/systemUpdate.js`
+  (Asuna has `send_email`; Obsidian access differs — filesystem vs. REST
+  API; naming like `update_lain` vs `update_asuna`).
 - Submodule edits: make the change in one app's `tools-agent/shared`
   checkout, `git commit && git push` from there, then sync the other app's
   submodule pointer (`git fetch origin && git checkout <sha>`) before
   committing the parent repo. Both parent repos should reference the same
-  submodule commit after a shared-logic change.
+  submodule commit after a shared-logic change. **Never hand-copy files
+  into both apps' `tools-agent/shared` checkouts independently** — that
+  creates two untracked/divergent working trees pointing at the same repo;
+  always go through one commit+push, then a fetch+checkout in the other.
 - When a feature/fix isn't purely shared logic (e.g. UI pages, prompt
   skills, per-app tool wiring), port it to the other app manually — do
   not assume file-for-file identical content; diff first, since the two
