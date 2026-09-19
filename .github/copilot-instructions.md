@@ -90,3 +90,49 @@ For any change: implement → lint the changed files → `npm run build` →
 commit (both repos, in sync if shared) → push → `./deploy.sh` → confirm
 both containers are healthy and, where relevant, exercise the change
 against the live app before calling it done.
+
+## Other established conventions
+
+- **Prefer no-schema-change designs.** When a feature can be layered onto
+  an existing field via a parsing convention (e.g. playbook sections are
+  `## Section Title` Markdown headings inside the existing `content`
+  column, not a new `sections` column), prefer that over an ALTER/new
+  column — it avoids migration risk on live containers and keeps old rows
+  valid for free (falls back to one untitled section/whatever the old
+  shape was). Only add real schema changes when a parsing convention
+  would be genuinely awkward or lossy.
+- **Lazy schema init gotcha.** `ensureSchema()` (see `lib/db.js`) only
+  runs the first time `getDb()` is called from an authenticated route —
+  new tables/columns you add won't exist on an already-running container
+  until that happens. This is safe (additive-only) but means a fresh
+  deploy can look "not migrated yet" until first real use; don't be
+  surprised, and don't add a startup migration step that changes this
+  behavior without discussing it first.
+- **Client bundle hygiene.** Don't import a server-only CJS tool module
+  (`tools-agent/shared/tools/*.js`, `lib/tools/*.js`) into a client
+  component just to reuse a couple of small pure-string/parsing helpers —
+  it drags the whole module (and its `require()`-only dependencies) into
+  the client bundle. Duplicate the small helper(s) inline in the client
+  file instead, with a comment noting they must stay in sync with the
+  server-side source of truth (see `app/playbooks/page.js`'s duplicated
+  section helpers for the pattern).
+- **Render-time self-heal for user-facing formatting bugs.** If a
+  formatting/normalization bug affects how stored content displays (not
+  just how new content is generated), fix it at render time (e.g.
+  `app/MarkdownMessage.js`) in addition to/instead of only at generation
+  time, so historical rows self-heal too instead of staying permanently
+  broken just because they predate the fix.
+- **Tool confirmation convention.** Any new tool that mutates state, or
+  reads anything sensitive via the laptop tools agent, must be added to
+  that category module's `CONFIRM_REQUIRED_TOOLS` set so the user gets an
+  explicit Allow/Deny prompt. Pure read-only lookups (search/list/view)
+  execute immediately without confirmation — keep that split when adding
+  tools.
+- **Keep `TOOLS.md` in sync.** It's the maintainer-facing reference table
+  of every tool (name/params/implementation/endpoint). Update it whenever
+  a tool is added, removed, or changes shape. Note: as of this writing
+  it's already slightly stale — it describes tools as living in a single
+  `lib/tools.js` file, but that file is now just a barrel re-export over
+  `lib/tools/*.js` + `lib/tools/registry.js`. Fix that framing next time
+  you're touching the doc for an actual tool change, rather than as a
+  standalone cleanup.
