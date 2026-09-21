@@ -209,6 +209,20 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
     setSidebarOpen(false);
   }
 
+  // See CONTEXT_WARNING_TOKENS in lib/ollama.js: past a certain amount of
+  // real prompt tokens, the local model gets unreliable at actually
+  // invoking tools and starts fabricating "done!" text instead — verified
+  // during a live incident. The backend flags this per-response via
+  // `contextWarning`; surface a dismissible nudge with a one-click "New
+  // Chat" CTA rather than trusting the model to notice and say so itself.
+  function addContextNudgeIfNeeded(data) {
+    if (!data.contextWarning) return;
+    setMessages((prev) => {
+      if (prev.length && prev[prev.length - 1].role === "context_nudge") return prev;
+      return [...prev, { role: "context_nudge" }];
+    });
+  }
+
   async function removeConversation(e, id) {
     e.stopPropagation();
     await fetch(`/api/conversations/${id}`, { method: "DELETE" });
@@ -322,6 +336,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             toolCalls: data.toolCalls,
           },
         ]);
+        addContextNudgeIfNeeded(data);
         return;
       }
 
@@ -329,6 +344,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         ...prev,
         { role: "assistant", content: data.reply },
       ]);
+      addContextNudgeIfNeeded(data);
       refreshConversations();
     } catch (err) {
       // Network drop, timeout, or the tab reconnecting after sleep — the
@@ -391,6 +407,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
             toolCalls: data.toolCalls,
           },
         ]);
+        addContextNudgeIfNeeded(data);
         return;
       }
 
@@ -398,6 +415,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         ...prev,
         { role: "assistant", content: data.reply },
       ]);
+      addContextNudgeIfNeeded(data);
       refreshConversations();
     } catch (err) {
       setMessages((prev) => [
@@ -793,7 +811,26 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
           }}
         >
           {messages.map((m, i) =>
-            m.role === "confirm" ? (
+            m.role === "context_nudge" ? (
+              <div
+                key={i}
+                className="max-w-[85%] sm:max-w-[70%] px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/40 space-y-2"
+              >
+                <p className="text-sm text-amber-200">
+                  ⚠️ This chat's gotten long — Lain's tool-calling gets less
+                  reliable (she may say she did something without actually
+                  doing it). Start a new chat before asking her to save or
+                  change anything important.
+                </p>
+                <button
+                  type="button"
+                  onClick={startNewChat}
+                  className="rounded-lg bg-amber-500/80 hover:bg-amber-500 text-black py-1.5 px-3 text-sm font-semibold"
+                >
+                  + Start New Chat
+                </button>
+              </div>
+            ) : m.role === "confirm" ? (
               <div
                 key={i}
                 className="max-w-[85%] sm:max-w-[70%] px-4 py-3 rounded-2xl bg-[var(--lain-panel-alt)]/50 border border-[var(--lain-highlight)]/50 space-y-2"

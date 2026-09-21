@@ -6,7 +6,11 @@ import { loadHistory, saveMessage } from "@/lib/conversations";
 import { describeToolCall } from "@/lib/tools";
 import { deletePending, getPending } from "@/lib/pendingToolCalls";
 import { runToolLoop } from "@/lib/toolLoop";
-import { OLLAMA_HOST } from "@/lib/ollama";
+import { OLLAMA_HOST, CONTEXT_WARNING_TOKENS } from "@/lib/ollama";
+
+function isContextHeavy(promptEvalCount) {
+  return typeof promptEvalCount === "number" && promptEvalCount >= CONTEXT_WARNING_TOKENS;
+}
 
 export async function POST(request) {
   const { pendingId, approve } = await request.json();
@@ -64,6 +68,7 @@ export async function POST(request) {
       conversationId,
       needsConfirmation: true,
       pendingId: loopResult.pendingId,
+      contextWarning: isContextHeavy(loopResult.promptEvalCount),
       toolCalls: loopResult.toolCalls.map((tc) => ({
         name: tc.function?.name,
         arguments: tc.function?.arguments,
@@ -79,5 +84,5 @@ export async function POST(request) {
     "assistant",
     `*(${loopResult.summaries.join("; ")})*\n\n${reply}`
   );
-  return Response.json({ reply, conversationId });
+  return Response.json({ reply, conversationId, contextWarning: isContextHeavy(loopResult.promptEvalCount) });
 }

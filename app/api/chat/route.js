@@ -14,7 +14,7 @@ import { createPending } from "@/lib/pendingToolCalls";
 import { runToolLoop } from "@/lib/toolLoop";
 import { profilePromptAddendum } from "@/lib/profile";
 import { memoryPromptAddendum } from "@/lib/memory";
-import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP } from "@/lib/ollama";
+import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP, CONTEXT_WARNING_TOKENS } from "@/lib/ollama";
 import { detectTone } from "@/lib/tone";
 import { shodanConfigured } from "@/lib/shodan";
 import { obsidianConfigured } from "@/lib/tools/obsidian";
@@ -61,6 +61,15 @@ function currentTimeAddendum() {
 function emptyReplyFallback(convId, stage) {
   console.error(`[lain] empty completion from Ollama (conversation ${convId}, ${stage} stage)`);
   return "Sorry, I didn't get anything back there — mind trying that again?";
+}
+
+// See CONTEXT_WARNING_TOKENS in lib/ollama.js for why this exists — past
+// this point in a conversation's real prompt token usage, tool-calling
+// reliability degrades and the model is prone to fabricating "done!"
+// replies without ever invoking the tool. Surfaced to the frontend so it
+// can nudge the user toward starting a fresh chat.
+function isContextHeavy(promptEvalCount) {
+  return typeof promptEvalCount === "number" && promptEvalCount >= CONTEXT_WARNING_TOKENS;
 }
 
 // Some models (especially smaller/quantized ones) occasionally write out
@@ -211,6 +220,7 @@ export async function POST(request) {
           needsConfirmation: true,
           pendingId: loopResult.pendingId,
           tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
+          contextWarning: isContextHeavy(loopResult.promptEvalCount),
           toolCalls: loopResult.toolCalls.map((tc) => ({
             name: tc.function?.name,
             arguments: tc.function?.arguments,
@@ -226,6 +236,7 @@ export async function POST(request) {
         conversationId: convId,
         tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
         model: model || undefined,
+        contextWarning: isContextHeavy(loopResult.promptEvalCount),
       });
     }
 
@@ -241,6 +252,7 @@ export async function POST(request) {
       needsConfirmation: true,
       pendingId,
       tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
+      contextWarning: isContextHeavy(data.prompt_eval_count),
       toolCalls: toolCalls.map((tc) => ({
         name: tc.function?.name,
         arguments: tc.function?.arguments,
@@ -257,5 +269,6 @@ export async function POST(request) {
     conversationId: convId,
     tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
     model: model || undefined,
+    contextWarning: isContextHeavy(data.prompt_eval_count),
   });
 }
