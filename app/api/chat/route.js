@@ -18,6 +18,9 @@ import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP } from "@/lib/ollama";
 import { detectTone } from "@/lib/tone";
 import { shodanConfigured } from "@/lib/shodan";
 import { obsidianConfigured } from "@/lib/tools/obsidian";
+import { ipReputationConfigured } from "@/lib/ipReputation";
+import { urlhausConfigured } from "@/lib/urlhaus";
+import { fileReputationConfigured } from "@/lib/fileReputation";
 import { buildSkillsPromptAddendum } from "@/lib/promptSkills";
 
 const TIMEZONE = process.env.LAIN_TIMEZONE || "America/Chicago";
@@ -118,6 +121,9 @@ export async function POST(request) {
     shodanConfigured: shodanConfigured(),
     obsidianConfigured: obsidianConfigured(),
     toolsConfigured: toolsConfigured(),
+    ipReputationConfigured: ipReputationConfigured(),
+    urlhausConfigured: urlhausConfigured(),
+    fileReputationConfigured: fileReputationConfigured(),
   });
   systemPrompt += currentTimeAddendum();
   systemPrompt += profilePromptAddendum();

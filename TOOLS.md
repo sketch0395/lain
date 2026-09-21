@@ -139,6 +139,12 @@ API key configured.
 | `shodan_search`             | Run a Shodan search query (Shodan query syntax)                         | `query`, `limit`                | `tools/shodan.js`          | `SHODAN_API_KEY`           |
 | `shodan_dns_lookup`         | Resolve hostname(s) to IP address(es) via Shodan's DNS API               | `hostnames`                      | `tools/shodan.js`          | `SHODAN_API_KEY`           |
 | `shodan_account_info`       | Check the configured Shodan API key's plan/remaining credits             | —                                | `tools/shodan.js`          | `SHODAN_API_KEY`           |
+| `check_url_legitimacy`      | Is a URL/link legit? (VirusTotal + urlscan.io + domain age/homograph checks) | `url`                        | `tools/urlProvenance.js`   | `VIRUSTOTAL_API_KEY` or `URLSCAN_API_KEY` |
+| `lookup_cve`                | Look up a specific CVE's details (CVSS score, description, CWE, refs)   | `cve_id`                         | `tools/cve.js`             | — (optional `NVD_API_KEY`) |
+| `search_cves`               | Keyword search for CVEs (e.g. affecting a product/version)              | `keyword`, `limit`, `exact_match`| `tools/cve.js`             | — (optional `NVD_API_KEY`) |
+| `check_ip_reputation`       | Abuse reports/confidence score for an IP via AbuseIPDB                  | `ip`, `max_age_days`, `verbose`  | `tools/ipReputation.js`    | `ABUSEIPDB_API_KEY`        |
+| `check_urlhaus`             | Check a URL/host/hash against abuse.ch's malware distribution feed      | `url` or `host` or `hash`        | `tools/urlhaus.js`         | `URLHAUS_AUTH_KEY`         |
+| `check_file_hash`           | File reputation by MD5/SHA1/SHA256 hash via VirusTotal (~70 AV engines) | `hash`                           | `tools/fileReputation.js`  | `VIRUSTOTAL_API_KEY`       |
 
 ## Adding a new tool
 
