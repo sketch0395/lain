@@ -1,6 +1,7 @@
 import {
   ensureConversation,
   loadHistory,
+  maybeCompactHistory,
   maybeSetTitle,
   saveMessage,
 } from "@/lib/conversations";
@@ -231,6 +232,7 @@ export async function POST(request) {
 
       const reply2 = loopResult.content.trim() || emptyReplyFallback(convId, "follow-up");
       saveMessage(convId, "assistant", reply2);
+      maybeCompactHistory(convId).catch(() => {});
       return Response.json({
         reply: reply2,
         conversationId: convId,
@@ -263,6 +265,7 @@ export async function POST(request) {
 
   const reply = (data.message?.content || "").trim() || emptyReplyFallback(convId, "main");
   saveMessage(convId, "assistant", reply);
+  maybeCompactHistory(convId).catch(() => {});
 
   return Response.json({
     reply,

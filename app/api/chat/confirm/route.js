@@ -2,7 +2,7 @@
 // has approved or denied it in the chat UI. See app/api/chat/route.js for
 // where the confirmation request originates.
 
-import { loadHistory, saveMessage } from "@/lib/conversations";
+import { loadHistory, maybeCompactHistory, saveMessage } from "@/lib/conversations";
 import { describeToolCall } from "@/lib/tools";
 import { deletePending, getPending } from "@/lib/pendingToolCalls";
 import { runToolLoop } from "@/lib/toolLoop";
@@ -84,5 +84,9 @@ export async function POST(request) {
     "assistant",
     `*(${loopResult.summaries.join("; ")})*\n\n${reply}`
   );
+  // Fire-and-forget: fold older history into a recap if this conversation
+  // has grown long enough (see maybeCompactHistory). Never awaited so it
+  // can't add latency to this response.
+  maybeCompactHistory(conversationId).catch(() => {});
   return Response.json({ reply, conversationId, contextWarning: isContextHeavy(loopResult.promptEvalCount) });
 }
