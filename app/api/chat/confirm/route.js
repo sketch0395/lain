@@ -7,20 +7,21 @@ import { describeToolCall } from "@/lib/tools";
 import { deletePending, getPending } from "@/lib/pendingToolCalls";
 import { runToolLoop } from "@/lib/toolLoop";
 import { OLLAMA_HOST, CONTEXT_WARNING_TOKENS } from "@/lib/ollama";
+import { streamJsonResponse } from "@/lib/streamJson";
 
 function isContextHeavy(promptEvalCount) {
   return typeof promptEvalCount === "number" && promptEvalCount >= CONTEXT_WARNING_TOKENS;
 }
 
-export async function POST(request) {
-  const { pendingId, approve } = await request.json();
-
+// Extracted out of POST() so it can run inside streamJsonResponse()'s
+// ReadableStream — see lib/streamJson.js and app/api/chat/route.js's
+// handleChat() for why. Returns a plain JSON-able payload; internal error
+// paths return an { error } payload instead of a distinct HTTP status
+// since the outer response is already committed (200, streaming).
+async function handleConfirm({ pendingId, approve }) {
   const pending = getPending(pendingId);
   if (!pending) {
-    return Response.json(
-      { error: "This request has expired — please ask again." },
-      { status: 410 }
-    );
+    return { error: "This request has expired — please ask again." };
   }
   deletePending(pendingId);
 
@@ -30,7 +31,7 @@ export async function POST(request) {
     const reply =
       "Okay, I won't do that. Let me know if you'd like to try something else.";
     saveMessage(conversationId, "assistant", reply);
-    return Response.json({ reply, conversationId });
+    return { reply, conversationId };
   }
 
   // `messages` is the snapshot captured when the tool call was first proposed.
@@ -53,10 +54,7 @@ export async function POST(request) {
       firstRound: { assistantMessage: assistantToolMessage, toolCalls },
     });
   } catch (err) {
-    return Response.json(
-      { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` },
-      { status: 502 }
-    );
+    return { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` };
   }
 
   // The approved tool(s) may have led the model to request *another* tool
@@ -64,7 +62,7 @@ export async function POST(request) {
   // by a write) — surface that the same way the main chat route does
   // instead of silently dropping it.
   if (loopResult.needsConfirmation) {
-    return Response.json({
+    return {
       conversationId,
       needsConfirmation: true,
       pendingId: loopResult.pendingId,
@@ -74,7 +72,7 @@ export async function POST(request) {
         arguments: tc.function?.arguments,
         description: describeToolCall(tc.function?.name, tc.function?.arguments),
       })),
-    });
+    };
   }
 
   const reply = loopResult.content.trim() ||
@@ -88,5 +86,10 @@ export async function POST(request) {
   // has grown long enough (see maybeCompactHistory). Never awaited so it
   // can't add latency to this response.
   maybeCompactHistory(conversationId).catch(() => {});
-  return Response.json({ reply, conversationId, contextWarning: isContextHeavy(loopResult.promptEvalCount) });
+  return { reply, conversationId, contextWarning: isContextHeavy(loopResult.promptEvalCount) };
+}
+
+export async function POST(request) {
+  const { pendingId, approve } = await request.json();
+  return streamJsonResponse(() => handleConfirm({ pendingId, approve }));
 }

@@ -9,6 +9,47 @@ import WipeMemoryModal from "./WipeMemoryModal";
 import GrantCapturePermissionModal from "./GrantCapturePermissionModal";
 import MarkdownMessage from "./MarkdownMessage";
 
+// /api/chat and /api/chat/confirm stream their JSON payload back as a
+// series of newline-terminated chunks (heartbeat blank lines, then one
+// final JSON line) instead of a single blocking response — see
+// lib/streamJson.js for why. This reads the stream to completion and
+// parses the last well-formed JSON line, regardless of how the underlying
+// chunk boundaries land — works the same for both a heartbeat-padded
+// stream and a plain one-shot JSON body.
+async function readStreamedJson(res) {
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let lastPayload = null;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let newlineIndex;
+    while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
+      const line = buffer.slice(0, newlineIndex).trim();
+      buffer = buffer.slice(newlineIndex + 1);
+      if (!line) continue; // heartbeat/blank line — ignore
+      try {
+        lastPayload = JSON.parse(line);
+      } catch {
+        // Ignore malformed/partial lines; only a complete JSON line counts.
+      }
+    }
+  }
+  if (buffer.trim()) {
+    try {
+      lastPayload = JSON.parse(buffer.trim());
+    } catch {
+      // Ignore — fall through to the "no payload" error below.
+    }
+  }
+  if (!lastPayload) {
+    throw new Error("Connection dropped before a response arrived — please try again.");
+  }
+  return lastPayload;
+}
+
 export default function ChatClient({ userLabel, userImage, signOutAction }) {
   const [conversations, setConversations] = useState([]);
   const [conversationId, setConversationId] = useState(null);
@@ -302,9 +343,9 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
 
       if (res.status === 401) return redirectToLogin();
 
-      const data = await res.json();
+      const data = await readStreamedJson(res);
 
-      if (!res.ok) {
+      if (data.error) {
         setMessages((prev) => [
           ...prev,
           {
@@ -380,8 +421,8 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ pendingId, approve }),
       });
-      const data = await res.json();
-      if (!res.ok) {
+      const data = await readStreamedJson(res);
+      if (data.error) {
         setMessages((prev) => [
           ...prev,
           {

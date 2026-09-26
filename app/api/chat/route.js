@@ -23,6 +23,7 @@ import { ipReputationConfigured } from "@/lib/ipReputation";
 import { urlhausConfigured } from "@/lib/urlhaus";
 import { fileReputationConfigured } from "@/lib/fileReputation";
 import { buildSkillsPromptAddendum } from "@/lib/promptSkills";
+import { streamJsonResponse } from "@/lib/streamJson";
 
 const TIMEZONE = process.env.LAIN_TIMEZONE || "America/Chicago";
 
@@ -114,13 +115,13 @@ function looksLikeFakeToolCall(text) {
   return fakeToolNamePattern.test(text) || toolIntentPattern.test(text);
 }
 
-export async function POST(request) {
-  const { message, conversationId, personality, deepThinking } = await request.json();
-
-  if (!message || typeof message !== "string") {
-    return Response.json({ error: "message is required" }, { status: 400 });
-  }
-
+// The actual chat logic, extracted out of POST() so it can run inside
+// streamJsonResponse()'s ReadableStream (see lib/streamJson.js for why) —
+// returns the JSON-able payload object directly instead of a Response, and
+// every internal error path returns an { error } payload instead of a
+// distinct HTTP status, since the outer HTTP response is already committed
+// (200, streaming) by the time any of this runs.
+async function handleChat({ message, conversationId, personality, deepThinking }) {
   // Reminders/news are always available; laptop diagnostics/file tools only
   // when the tools agent is configured.
   const useTools = true;
@@ -151,12 +152,7 @@ export async function POST(request) {
   try {
     data = await callOllama(messages, useTools, { model });
   } catch (err) {
-    return Response.json(
-      {
-        error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}`,
-      },
-      { status: 502 }
-    );
+    return { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` };
   }
 
   // If no real tool_calls came back but the text looks like a hallucinated
@@ -209,14 +205,11 @@ export async function POST(request) {
           firstRound: { assistantMessage: data.message, toolCalls },
         });
       } catch (err) {
-        return Response.json(
-          { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` },
-          { status: 502 }
-        );
+        return { error: `Could not reach Ollama at ${OLLAMA_HOST}: ${err.message}` };
       }
 
       if (loopResult.needsConfirmation) {
-        return Response.json({
+        return {
           conversationId: convId,
           needsConfirmation: true,
           pendingId: loopResult.pendingId,
@@ -227,19 +220,19 @@ export async function POST(request) {
             arguments: tc.function?.arguments,
             description: describeToolCall(tc.function?.name, tc.function?.arguments),
           })),
-        });
+        };
       }
 
       const reply2 = loopResult.content.trim() || emptyReplyFallback(convId, "follow-up");
       saveMessage(convId, "assistant", reply2);
       maybeCompactHistory(convId).catch(() => {});
-      return Response.json({
+      return {
         reply: reply2,
         conversationId: convId,
         tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
         model: model || undefined,
         contextWarning: isContextHeavy(loopResult.promptEvalCount),
-      });
+      };
     }
 
     const pendingId = createPending({
@@ -249,7 +242,7 @@ export async function POST(request) {
       toolCalls,
       model,
     });
-    return Response.json({
+    return {
       conversationId: convId,
       needsConfirmation: true,
       pendingId,
@@ -260,18 +253,30 @@ export async function POST(request) {
         arguments: tc.function?.arguments,
         description: describeToolCall(tc.function?.name, tc.function?.arguments),
       })),
-    });
+    };
   }
 
   const reply = (data.message?.content || "").trim() || emptyReplyFallback(convId, "main");
   saveMessage(convId, "assistant", reply);
   maybeCompactHistory(convId).catch(() => {});
 
-  return Response.json({
+  return {
     reply,
     conversationId: convId,
     tone: { label: tone.label, emoji: tone.emoji, hint: tone.hint },
     model: model || undefined,
     contextWarning: isContextHeavy(data.prompt_eval_count),
-  });
+  };
+}
+
+export async function POST(request) {
+  const { message, conversationId, personality, deepThinking } = await request.json();
+
+  if (!message || typeof message !== "string") {
+    return Response.json({ error: "message is required" }, { status: 400 });
+  }
+
+  return streamJsonResponse(() =>
+    handleChat({ message, conversationId, personality, deepThinking })
+  );
 }
