@@ -681,6 +681,17 @@ to fall back to `LAIN_REMINDER_EMAIL_TO` in `.env`.
 - `Dockerfile`, `docker-compose.yml` – production deployment
 - `deploy.sh` – local `docker compose up -d --build`
 
+## Uninstalling
+
+`./uninstall.sh` reverses everything `install.sh`/`deploy.sh` set up:
+the Docker container/image, the tools agent systemd service, the CLI
+binary, and the Hyprland/Omarchy integration. It's interactive by
+default (asks before removing each piece) and leaves your `.env` and
+the SQLite data volume in place unless you pass `--remove-env` or
+`--purge-data`. Supports `--host`/`--user`/`--port`/`--dir` for remote
+deployments, `--non-interactive`, `--all` (remove everything, no
+prompts), and `-h/--help` for details.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
