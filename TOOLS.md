@@ -135,7 +135,6 @@ API key configured.
 | `list_cyber_news_sources`   | List configured cyber news sources                                       | —                                | `tools/cyberNews.js`       | —                          |
 | `remove_cyber_news_source`  | Remove a configured cyber news source                                    | `name_or_url`                   | `tools/cyberNews.js`       | —                          |
 | `set_cyber_news_watch_terms`| Save standing "what to look for" filter terms for `get_cyber_news`       | `watch_terms`                   | `tools/cyberNews.js`       | —                          |
-| `generate_cyber_briefing`  | Generate a deep, verified, categorized cyber briefing (15-30 stories, NIST/RMF mapping) | — | `cyberBriefing.js` | —                          |
 | `shodan_host_lookup`        | Everything Shodan knows about a public IP (ports, banners, CVEs, org)    | `ip`                             | `tools/shodan.js`          | `SHODAN_API_KEY`           |
 | `shodan_search`             | Run a Shodan search query (Shodan query syntax)                         | `query`, `limit`                | `tools/shodan.js`          | `SHODAN_API_KEY`           |
 | `shodan_dns_lookup`         | Resolve hostname(s) to IP address(es) via Shodan's DNS API               | `hostnames`                      | `tools/shodan.js`          | `SHODAN_API_KEY`           |
