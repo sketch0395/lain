@@ -72,6 +72,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
   const [grantCaptureOpen, setGrantCaptureOpen] = useState(false);
   const [tone, setTone] = useState(null);
   const [deepThinking, setDeepThinking] = useState(false);
+  const [securityMode, setSecurityMode] = useState(false);
   const scrollRef = useRef(null);
 
   useEffect(() => {
@@ -84,6 +85,9 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
 
     const storedDeep = window.localStorage.getItem("lain-deep-thinking");
     if (storedDeep !== null) setDeepThinking(storedDeep === "true");
+
+    const storedSecurity = window.localStorage.getItem("lain-security-mode");
+    if (storedSecurity !== null) setSecurityMode(storedSecurity === "true");
 
     initNotifications();
 
@@ -113,6 +117,24 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
       window.localStorage.setItem("lain-deep-thinking", String(next));
       return next;
     });
+    // Mutually exclusive with security mode — only one specialist model can
+    // be loaded on the Ollama host at a time.
+    if (!deepThinking) {
+      setSecurityMode(false);
+      window.localStorage.setItem("lain-security-mode", "false");
+    }
+  }
+
+  function toggleSecurityMode() {
+    setSecurityMode((prev) => {
+      const next = !prev;
+      window.localStorage.setItem("lain-security-mode", String(next));
+      return next;
+    });
+    if (!securityMode) {
+      setDeepThinking(false);
+      window.localStorage.setItem("lain-deep-thinking", "false");
+    }
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -338,6 +360,7 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
           conversationId,
           personality,
           deepThinking,
+          securityMode,
         }),
       });
 
@@ -955,7 +978,21 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
           </div>
         )}
 
-        <div className="px-3 sm:px-4 pt-2 flex items-center justify-end">
+        <div className="px-3 sm:px-4 pt-2 flex items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={toggleSecurityMode}
+            aria-pressed={securityMode}
+            title="Security Mode uses BaronLLM, a specialist offensive-security/red-team model (a bit slower to respond, including a brief model-swap delay)"
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-colors ${
+              securityMode
+                ? "bg-[var(--lain-accent)] border-[var(--lain-highlight)]/40 text-[var(--lain-text)]"
+                : "bg-[var(--lain-panel-alt)] border-[var(--lain-border)] text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+            }`}
+          >
+            <span>🛡️</span>
+            <span>{securityMode ? "Security Mode: on" : "Security Mode: off"}</span>
+          </button>
           <button
             type="button"
             onClick={toggleDeepThinking}

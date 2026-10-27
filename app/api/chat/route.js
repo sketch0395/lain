@@ -15,7 +15,13 @@ import { createPending } from "@/lib/pendingToolCalls";
 import { runToolLoop } from "@/lib/toolLoop";
 import { profilePromptAddendum } from "@/lib/profile";
 import { memoryPromptAddendum } from "@/lib/memory";
-import { callOllama, OLLAMA_HOST, OLLAMA_MODEL_DEEP, CONTEXT_WARNING_TOKENS } from "@/lib/ollama";
+import {
+  callOllama,
+  OLLAMA_HOST,
+  OLLAMA_MODEL_DEEP,
+  OLLAMA_MODEL_SECURITY,
+  CONTEXT_WARNING_TOKENS,
+} from "@/lib/ollama";
 import { detectTone } from "@/lib/tone";
 import { shodanConfigured } from "@/lib/shodan";
 import { obsidianConfigured } from "@/lib/tools/obsidian";
@@ -121,11 +127,13 @@ function looksLikeFakeToolCall(text) {
 // every internal error path returns an { error } payload instead of a
 // distinct HTTP status, since the outer HTTP response is already committed
 // (200, streaming) by the time any of this runs.
-async function handleChat({ message, conversationId, personality, deepThinking }) {
+async function handleChat({ message, conversationId, personality, deepThinking, securityMode }) {
   // Reminders/news are always available; laptop diagnostics/file tools only
   // when the tools agent is configured.
   const useTools = true;
-  const model = deepThinking ? OLLAMA_MODEL_DEEP : undefined;
+  // securityMode and deepThinking are mutually exclusive in the UI, but if
+  // both were ever sent, prefer the more specialized security model.
+  const model = securityMode ? OLLAMA_MODEL_SECURITY : deepThinking ? OLLAMA_MODEL_DEEP : undefined;
   const tone = detectTone(message);
   let systemPrompt = personality === false ? NEUTRAL_PROMPT : PERSONALITY_PROMPT;
   systemPrompt += buildSkillsPromptAddendum(message, {
@@ -270,13 +278,13 @@ async function handleChat({ message, conversationId, personality, deepThinking }
 }
 
 export async function POST(request) {
-  const { message, conversationId, personality, deepThinking } = await request.json();
+  const { message, conversationId, personality, deepThinking, securityMode } = await request.json();
 
   if (!message || typeof message !== "string") {
     return Response.json({ error: "message is required" }, { status: 400 });
   }
 
   return streamJsonResponse(() =>
-    handleChat({ message, conversationId, personality, deepThinking })
+    handleChat({ message, conversationId, personality, deepThinking, securityMode })
   );
 }
