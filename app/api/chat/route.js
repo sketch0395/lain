@@ -130,7 +130,14 @@ function looksLikeFakeToolCall(text) {
 async function handleChat({ message, conversationId, personality, deepThinking, securityMode }) {
   // Reminders/news are always available; laptop diagnostics/file tools only
   // when the tools agent is configured.
-  const useTools = true;
+  //
+  // BaronLLM (OLLAMA_MODEL_SECURITY) was fine-tuned purely on security Q&A
+  // text, not on Llama 3.1's native tool-calling grammar — handing it any
+  // tool schema makes llama.cpp's grammar-constrained decoding fail
+  // outright (500 "does not match the expected peg-native format"), or
+  // produces narrated pseudo-tool-call text instead of real calls. Keep it
+  // plain-chat only.
+  const useTools = !securityMode;
   // securityMode and deepThinking are mutually exclusive in the UI, but if
   // both were ever sent, prefer the more specialized security model.
   const model = securityMode ? OLLAMA_MODEL_SECURITY : deepThinking ? OLLAMA_MODEL_DEEP : undefined;
