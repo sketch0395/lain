@@ -62,6 +62,7 @@ const { checkAuth, send, createRouter } = require("./lib/http");
 
 const router = createRouter();
 require("./lib/diagnostics").registerRoutes(router);
+require("./lib/hardware").registerRoutes(router);
 require("./lib/omarchy").registerRoutes(router);
 require("./lib/files").registerRoutes(router);
 require("./lib/forensics").registerRoutes(router);

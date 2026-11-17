@@ -35,6 +35,8 @@ a sensitive-path denylist (see `tools-agent/lib/paths.js`).
 | Tool (function name)     | What it does                                                        | Key params                          | Agent endpoint          | Agent module                       |
 |---------------------------|----------------------------------------------------------------------|--------------------------------------|--------------------------|--------------------------------------|
 | `system_diagnostics`      | CPU load, memory, disk usage, uptime, hostname                       | —                                    | `GET /diagnostics`      | `tools-agent/lib/diagnostics.js`     |
+| `get_system_info`         | Machine make/model, OS, CPU, RAM, GPU(s)/VRAM, free disk            | —                                    | `GET /system-info`      | `tools-agent/lib/hardware.js`        |
+| `can_run_model`           | Will a local LLM fit/run here? Verdict, memory needed vs available   | `model`, `params_b`, `quant`, `size_gb`, `context` | `GET /model-fit` | `tools-agent/lib/hardware.js` |
 | `find_files`              | Find files by (partial) filename                                     | `query`, `root`, `limit`             | `GET /find`             | `tools-agent/lib/files.js`           |
 | `search_files`            | Search file contents for a substring                                 | `query`, `root`, `limit`             | `GET /search`           | `tools-agent/lib/files.js`           |
 | `list_directory`          | List a directory's immediate contents                                | `root`, `limit`                      | `GET /list`             | `tools-agent/lib/files.js`           |
