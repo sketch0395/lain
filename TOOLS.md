@@ -140,6 +140,9 @@ API key configured.
 | `list_iocs`                 | List a case's indicators and verdicts                                    | `incident_id`?, `verdict`?      | `lib/incidentIocs.js`       | —                          |
 | `enrich_iocs`               | Check pending indicators via AbuseIPDB / URLhaus / VirusTotal            | `incident_id`?, `ioc_id`?, `limit`? | `lib/incidentIocs.js`   | external reputation APIs   |
 | `set_ioc_verdict`           | Analyst-set verdict (locks it from auto-enrichment); confirm required    | `ioc_id`, `verdict`, `notes`?   | `lib/incidentIocs.js`       | —                          |
+| `start_playbook_run`        | Start a tracked step-by-step run of a library playbook on a case         | `playbook_id`, `incident_id`?   | `lib/playbookRuns.js`       | —                          |
+| `get_playbook_run`          | Show a run's steps, statuses and next step                               | `run_id`?, `incident_id`?       | `lib/playbookRuns.js`       | —                          |
+| `update_playbook_step`      | Mark a step done/skipped/blocked/pending; logs to the timeline           | `step`, `status`, `note`?, `run_id`? | `lib/playbookRuns.js`  | —                          |
 | `fetch_web_page`            | Fetch a URL and extract readable text (for summarizing articles/advisories) | `url`                        | `tools/webFetch.js`        | —                          |
 | `get_cyber_news`            | Fetch recent items from configured cybersecurity RSS/Atom sources        | `topic`, `limit`                | `tools/cyberNews.js`       | —                          |
 | `add_cyber_news_source`     | Add an RSS/Atom feed to pull cyber news from                            | `name`, `url`                   | `tools/cyberNews.js`       | —                          |
