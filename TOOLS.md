@@ -35,6 +35,8 @@ a sensitive-path denylist (see `tools-agent/lib/paths.js`).
 | Tool (function name)     | What it does                                                        | Key params                          | Agent endpoint          | Agent module                       |
 |---------------------------|----------------------------------------------------------------------|--------------------------------------|--------------------------|--------------------------------------|
 | `system_diagnostics`      | CPU load, memory, disk usage, uptime, hostname                       | —                                    | `GET /diagnostics`      | `tools-agent/lib/diagnostics.js`     |
+| `get_system_info`         | Machine make/model, OS, CPU, RAM, GPU(s)/VRAM, free disk            | —                                    | `GET /system-info`      | `tools-agent/lib/hardware.js`        |
+| `can_run_model`           | Will a local LLM fit/run here? Verdict, memory needed vs available   | `model`, `params_b`, `quant`, `size_gb`, `context` | `GET /model-fit` | `tools-agent/lib/hardware.js` |
 | `find_files`              | Find files by (partial) filename                                     | `query`, `root`, `limit`             | `GET /find`             | `tools-agent/lib/files.js`           |
 | `search_files`            | Search file contents for a substring                                 | `query`, `root`, `limit`             | `GET /search`           | `tools-agent/lib/files.js`           |
 | `list_directory`          | List a directory's immediate contents                                | `root`, `limit`                      | `GET /list`             | `tools-agent/lib/files.js`           |
@@ -129,6 +131,11 @@ API key configured.
 |------------------------------|--------------------------------------------------------------------------|-----------------------------------|-----------------------------|----------------------------|
 | `lookup_threat_intel`       | Search the threat intel library (categories/titles/tags/content)        | `query`, `limit`                | `tools/threatIntel.js`     | —                          |
 | `add_threat_intel`          | Save/log an entry into the threat intel library                         | `category`, `title`, `content`, `tags` | `tools/threatIntel.js` | —                          |
+| `open_incident`             | Open an incident case and link it to this conversation (confirmation required) | `title`, `severity`, `category`, `summary`, `owner` | `lib/incidentCases.js`| —                |
+| `update_incident`           | Change a case's severity/status/phase/owner/etc.; logged to timeline (confirmation required) | `incident_id`?, `severity`, `status`, `phase`, … | `lib/incidentCases.js`| —       |
+| `add_incident_note`         | Append a note/finding/action to a case timeline (defaults to the conversation's active case) | `content`, `type`, `incident_id`? | `lib/incidentCases.js`| —       |
+| `list_incidents`            | List incident cases, optionally by status                                | `status`, `include_closed`      | `lib/incidentCases.js`      | —                          |
+| `get_incident`              | Get one case with full timeline and links                                | `incident_id`?                  | `lib/incidentCases.js`      | —                          |
 | `fetch_web_page`            | Fetch a URL and extract readable text (for summarizing articles/advisories) | `url`                        | `tools/webFetch.js`        | —                          |
 | `get_cyber_news`            | Fetch recent items from configured cybersecurity RSS/Atom sources        | `topic`, `limit`                | `tools/cyberNews.js`       | —                          |
 | `add_cyber_news_source`     | Add an RSS/Atom feed to pull cyber news from                            | `name`, `url`                   | `tools/cyberNews.js`       | —                          |

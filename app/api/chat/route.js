@@ -29,6 +29,7 @@ import { ipReputationConfigured } from "@/lib/ipReputation";
 import { urlhausConfigured } from "@/lib/urlhaus";
 import { fileReputationConfigured } from "@/lib/fileReputation";
 import { buildSkillsPromptAddendum } from "@/lib/promptSkills";
+import { getActiveIncidentForConversation, incidentContextAddendum } from "@/lib/incidents";
 import { streamJsonResponse } from "@/lib/streamJson";
 
 const TIMEZONE = process.env.LAIN_TIMEZONE || "America/Chicago";
@@ -142,8 +143,11 @@ async function handleChat({ message, conversationId, personality, deepThinking, 
   // both were ever sent, prefer the more specialized security model.
   const model = securityMode ? OLLAMA_MODEL_SECURITY : deepThinking ? OLLAMA_MODEL_DEEP : undefined;
   const tone = detectTone(message);
+  const convId = ensureConversation(conversationId);
+  const activeIncident = useTools ? getActiveIncidentForConversation(convId) : null;
   let systemPrompt = personality === false ? NEUTRAL_PROMPT : PERSONALITY_PROMPT;
   systemPrompt += buildSkillsPromptAddendum(message, {
+    activeIncident: !!activeIncident,
     shodanConfigured: shodanConfigured(),
     obsidianConfigured: obsidianConfigured(),
     toolsConfigured: toolsConfigured(),
@@ -156,7 +160,7 @@ async function handleChat({ message, conversationId, personality, deepThinking, 
   systemPrompt += memoryPromptAddendum();
   if (personality !== false) systemPrompt += tone.addendum;
 
-  const convId = ensureConversation(conversationId);
+  systemPrompt += incidentContextAddendum(activeIncident);
   saveMessage(convId, "user", message);
   maybeSetTitle(convId, message);
 
