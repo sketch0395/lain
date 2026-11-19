@@ -16,6 +16,14 @@ const SEVERITIES = ["low", "medium", "high", "critical"];
 const STATUSES = ["open", "investigating", "contained", "resolved", "closed"];
 const PHASES = ["triage", "containment", "eradication", "recovery", "review"];
 const EVENT_TYPES = ["note", "finding", "action"];
+// Keep in sync with VERDICTS in lib/incidentIocs.js.
+const VERDICTS = ["unknown", "benign", "suspicious", "malicious"];
+const VERDICT_STYLE = {
+  unknown: "text-[var(--lain-muted)] border-[var(--lain-border)]",
+  benign: "text-emerald-300 border-emerald-400/40",
+  suspicious: "text-orange-300 border-orange-400/50",
+  malicious: "text-red-400 border-red-500/60",
+};
 
 const SEVERITY_STYLE = {
   low: "text-sky-300 border-sky-400/40",
@@ -61,6 +69,9 @@ export default function IncidentsPage() {
   const [noteType, setNoteType] = useState("note");
   const [noteText, setNoteText] = useState("");
   const [summaryDraft, setSummaryDraft] = useState(null);
+  const [iocText, setIocText] = useState("");
+  const [iocBusy, setIocBusy] = useState(false);
+  const [iocMsg, setIocMsg] = useState("");
 
   useEffect(() => {
     loadList();
@@ -156,6 +167,90 @@ export default function IncidentsPage() {
       await loadList();
     } catch {
       setError("Couldn't add that entry.");
+    }
+  }
+
+  async function refreshCase() {
+    await loadDetail(selectedId);
+    await loadList();
+  }
+
+  async function addIocs(e) {
+    e.preventDefault();
+    if (!iocText.trim()) return;
+    setIocBusy(true);
+    setIocMsg("");
+    setError("");
+    try {
+      const res = await fetch(`/api/incidents/${selectedId}/iocs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: iocText }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't add indicators");
+      setIocMsg(
+        data.added.length
+          ? `Added ${data.added.length} indicator${data.added.length === 1 ? "" : "s"}.`
+          : "No new indicators found in that text."
+      );
+      setIocText("");
+      await refreshCase();
+    } catch (err) {
+      setError(err.message || "Couldn't add indicators.");
+    }
+    setIocBusy(false);
+  }
+
+  async function enrich(iocId) {
+    setIocBusy(true);
+    setIocMsg("");
+    setError("");
+    try {
+      const res = await fetch(`/api/incidents/${selectedId}/iocs/enrich`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(iocId ? { iocId } : {}),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Enrichment failed");
+      const skipped = data.results.filter((r) => r.skipped && !r.errors).length;
+      const failed = data.results.filter((r) => r.errors).length;
+      setIocMsg(
+        `Checked ${data.results.length - skipped} indicator(s)` +
+          (skipped ? `, skipped ${skipped} (private IP or no source configured)` : "") +
+          (failed ? `, ${failed} had lookup errors` : "") +
+          (data.remaining ? `. ${data.remaining} more pending — click Enrich again.` : ".")
+      );
+      await refreshCase();
+    } catch (err) {
+      setError(err.message || "Enrichment failed.");
+    }
+    setIocBusy(false);
+  }
+
+  async function setIocVerdict(iocId, verdict) {
+    setError("");
+    try {
+      const res = await fetch(`/api/incidents/${selectedId}/iocs/${iocId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ verdict }),
+      });
+      if (!res.ok) throw new Error();
+      await refreshCase();
+    } catch {
+      setError("Couldn't update that indicator.");
+    }
+  }
+
+  async function removeIoc(iocId) {
+    setError("");
+    try {
+      await fetch(`/api/incidents/${selectedId}/iocs/${iocId}`, { method: "DELETE" });
+      await refreshCase();
+    } catch {
+      setError("Couldn't remove that indicator.");
     }
   }
 
@@ -320,7 +415,7 @@ export default function IncidentsPage() {
                   #{i.id} {i.title}
                 </p>
                 <p className="text-[10px] text-[var(--lain-muted)]">
-                  {i.event_count} events · updated {fmt(i.updated_at)}
+                  {i.event_count} events · {i.ioc_count} IOCs · updated {fmt(i.updated_at)}
                 </p>
               </button>
             ))}
@@ -401,6 +496,96 @@ export default function IncidentsPage() {
                     ))}
                   </div>
                 )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] uppercase text-[var(--lain-muted)]">
+                      Indicators ({detail.iocs.length})
+                    </p>
+                    {detail.iocs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => enrich()}
+                        disabled={iocBusy}
+                        title="Check pending indicators against AbuseIPDB / URLhaus / VirusTotal"
+                        className={`${BTN} disabled:opacity-50`}
+                      >
+                        {iocBusy ? "Working…" : "🔍 Enrich"}
+                      </button>
+                    )}
+                  </div>
+                  {iocMsg && <p className="text-xs text-[var(--lain-muted)] mb-2">{iocMsg}</p>}
+                  {detail.iocs.length > 0 && (
+                    <div className="space-y-1.5 mb-2">
+                      {detail.iocs.map((ioc) => (
+                        <div
+                          key={ioc.id}
+                          className="border border-[var(--lain-border)] rounded-lg px-2.5 py-2 text-sm"
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] uppercase text-[var(--lain-muted)] w-12 shrink-0">
+                              {ioc.type}
+                            </span>
+                            <span className="font-mono text-xs text-[var(--lain-text)] truncate flex-1" title={ioc.value}>
+                              {ioc.value}
+                            </span>
+                            <select
+                              value={ioc.verdict}
+                              onChange={(e) => setIocVerdict(ioc.id, e.target.value)}
+                              title={ioc.locked ? "Set by an analyst — auto-enrichment won't change it" : "Verdict"}
+                              className={`text-[10px] uppercase bg-transparent border rounded px-1 py-0.5 ${VERDICT_STYLE[ioc.verdict]}`}
+                            >
+                              {VERDICTS.map((v) => (
+                                <option key={v} value={v} className="text-black normal-case">
+                                  {v}
+                                </option>
+                              ))}
+                            </select>
+                            {ioc.locked && <span title="Analyst-set">🔒</span>}
+                            <button
+                              type="button"
+                              onClick={() => enrich(ioc.id)}
+                              disabled={iocBusy}
+                              title="Re-check this indicator"
+                              className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)] disabled:opacity-50"
+                            >
+                              🔍
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => removeIoc(ioc.id)}
+                              title="Remove indicator"
+                              className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)]"
+                            >
+                              ✕
+                            </button>
+                          </div>
+                          {ioc.summary && (
+                            <p className="text-[11px] text-[var(--lain-muted)] mt-1 pl-14">
+                              {ioc.summary}
+                              {ioc.confidence != null ? ` · confidence ${ioc.confidence}` : ""}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <form onSubmit={addIocs} className="flex gap-2">
+                    <input
+                      value={iocText}
+                      onChange={(e) => setIocText(e.target.value)}
+                      placeholder="Paste text or an indicator (IP, domain, URL, hash, email — defanged OK)"
+                      className={`flex-1 ${INPUT}`}
+                    />
+                    <button
+                      type="submit"
+                      disabled={iocBusy || !iocText.trim()}
+                      className={`${BTN} disabled:opacity-50`}
+                    >
+                      Extract
+                    </button>
+                  </form>
+                </div>
 
                 <div>
                   <p className="text-[10px] uppercase text-[var(--lain-muted)] mb-2">Timeline</p>
