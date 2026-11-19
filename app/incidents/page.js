@@ -74,11 +74,14 @@ export default function IncidentsPage() {
   const [iocText, setIocText] = useState("");
   const [iocBusy, setIocBusy] = useState(false);
   const [iocMsg, setIocMsg] = useState("");
+  const [alerts, setAlerts] = useState([]);
+  const [showAlerts, setShowAlerts] = useState(false);
   const [playbooks, setPlaybooks] = useState([]);
   const [pickedPlaybook, setPickedPlaybook] = useState("");
 
   useEffect(() => {
     loadList();
+    loadAlerts();
   }, []);
 
   function selectCase(id) {
@@ -104,6 +107,33 @@ export default function IncidentsPage() {
       setError("Couldn't load incidents.");
     }
     setLoading(false);
+  }
+
+  async function loadAlerts() {
+    try {
+      const res = await fetch("/api/alerts?limit=50");
+      const data = await res.json();
+      setAlerts(data.alerts || []);
+    } catch {
+      // the inbox is optional; the case list still works without it
+    }
+  }
+
+  async function actOnAlert(alertId, body) {
+    setError("");
+    try {
+      const res = await fetch(`/api/alerts/${alertId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't update that alert");
+      await Promise.all([loadAlerts(), loadList()]);
+      if (data.incident_id) selectCase(data.incident_id);
+    } catch (err) {
+      setError(err.message || "Couldn't update that alert.");
+    }
   }
 
   async function loadDetail(id) {
@@ -435,6 +465,74 @@ export default function IncidentsPage() {
           </button>
         ))}
       </div>
+
+      {alerts.length > 0 && (
+        <div className="px-4 pb-3 shrink-0">
+          <button
+            type="button"
+            onClick={() => setShowAlerts((v) => !v)}
+            className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+          >
+            📥 Alert inbox — {alerts.filter((a) => a.status === "new").length} new, {alerts.length} recent{" "}
+            {showAlerts ? "▾" : "▸"}
+          </button>
+          {showAlerts && (
+            <div className="mt-2 max-h-56 overflow-y-auto space-y-1.5">
+              {alerts.map((a) => (
+                <div
+                  key={a.id}
+                  className="flex items-center gap-2 border border-[var(--lain-border)] rounded-lg px-2.5 py-1.5 text-xs"
+                >
+                  <SeverityBadge severity={a.severity} />
+                  <span className="text-[var(--lain-muted)] shrink-0">{a.source}</span>
+                  <span className="flex-1 truncate text-[var(--lain-text)]" title={a.title}>
+                    {a.title}
+                  </span>
+                  {a.count > 1 && <span className="text-[var(--lain-muted)]">×{a.count}</span>}
+                  {a.incident_id ? (
+                    <button
+                      type="button"
+                      onClick={() => selectCase(a.incident_id)}
+                      className="text-[var(--lain-accent-light)]"
+                    >
+                      {a.status} #{a.incident_id}
+                    </button>
+                  ) : a.status === "dismissed" ? (
+                    <span className="text-[var(--lain-muted)]">dismissed</span>
+                  ) : (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => actOnAlert(a.id, { action: "promote" })}
+                        className="text-[var(--lain-accent-light)]"
+                      >
+                        Open case
+                      </button>
+                      {detail && (
+                        <button
+                          type="button"
+                          onClick={() => actOnAlert(a.id, { action: "promote", incidentId: detail.id })}
+                          title={`Attach to #${detail.id}`}
+                          className="text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+                        >
+                          Attach
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => actOnAlert(a.id, { action: "dismiss" })}
+                        className="text-[var(--lain-muted)] hover:text-[var(--lain-text)]"
+                      >
+                        Dismiss
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {loading ? (
         <p className="px-4 text-sm text-[var(--lain-muted)]">Loading…</p>

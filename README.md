@@ -479,6 +479,33 @@ independent of the tools agent above.
    exposed RDP in Texas", or "resolve example.com and check what's running
    on it".
 
+## Alert intake (optional)
+
+Lets monitoring tools push alerts into Lain, where fixed rules triage them
+(no AI involved): duplicates are folded together, an alert sharing an
+indicator with an open case is attached to it, and anything at or above
+`LAIN_ALERT_AUTO_OPEN_SEVERITY` (default `high`) opens a case, enriches its
+indicators and sends you a notification. Everything else waits in the
+**Alert inbox** on the Incidents page.
+
+1. Set `LAIN_ALERT_WEBHOOK_TOKEN` in `.env` (`openssl rand -hex 32`), then
+   `./deploy.sh`. Leave it blank to keep the webhook disabled.
+2. Point your tool at `POST /api/webhooks/alerts` with
+   `Authorization: Bearer <token>` (or an `X-Lain-Token` header). It accepts
+   Wazuh alert JSON, Suricata EVE `alert` events, or any JSON with
+   `title`/`severity`/`description` (single object, array, or
+   `{"alerts": [...]}`). Add `?source=name` to label the sender.
+
+```
+curl -X POST http://localhost:3000/api/webhooks/alerts \
+  -H "Authorization: Bearer $LAIN_ALERT_WEBHOOK_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Suspicious login","severity":"high","description":"from 203.0.113.9"}'
+```
+
+Expose this endpoint only to the machines that need it; alert text is
+treated as untrusted data and never acted on automatically.
+
 ## Obsidian vault integration (optional)
 
 Lets Lain search, read, and save notes in a real local Obsidian vault (a
