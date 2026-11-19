@@ -17,6 +17,8 @@ const STATUSES = ["open", "investigating", "contained", "resolved", "closed"];
 const PHASES = ["triage", "containment", "eradication", "recovery", "review"];
 const EVENT_TYPES = ["note", "finding", "action"];
 // Keep in sync with VERDICTS in lib/incidentIocs.js.
+// Keep in sync with STEP_STATUSES in lib/playbookRuns.js.
+const STEP_ICON = { pending: "○", done: "✅", skipped: "⏭️", blocked: "⛔" };
 const VERDICTS = ["unknown", "benign", "suspicious", "malicious"];
 const VERDICT_STYLE = {
   unknown: "text-[var(--lain-muted)] border-[var(--lain-border)]",
@@ -72,6 +74,8 @@ export default function IncidentsPage() {
   const [iocText, setIocText] = useState("");
   const [iocBusy, setIocBusy] = useState(false);
   const [iocMsg, setIocMsg] = useState("");
+  const [playbooks, setPlaybooks] = useState([]);
+  const [pickedPlaybook, setPickedPlaybook] = useState("");
 
   useEffect(() => {
     loadList();
@@ -84,6 +88,10 @@ export default function IncidentsPage() {
       return;
     }
     loadDetail(id);
+    fetch("/api/playbooks")
+      .then((r) => r.json())
+      .then((d) => setPlaybooks(d.entries || []))
+      .catch(() => {});
   }
 
   async function loadList() {
@@ -168,6 +176,49 @@ export default function IncidentsPage() {
     } catch {
       setError("Couldn't add that entry.");
     }
+  }
+
+  async function startRun() {
+    if (!pickedPlaybook) return;
+    setError("");
+    try {
+      const res = await fetch(`/api/incidents/${selectedId}/runs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playbookId: Number(pickedPlaybook) }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Couldn't start the playbook");
+      setPickedPlaybook("");
+      await refreshCase();
+    } catch (err) {
+      setError(err.message || "Couldn't start the playbook.");
+    }
+  }
+
+  async function patchRun(runId, body) {
+    setError("");
+    try {
+      const res = await fetch(`/api/incidents/${selectedId}/runs/${runId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || "Update failed");
+      await refreshCase();
+    } catch (err) {
+      setError(err.message || "Update failed.");
+    }
+  }
+
+  function setStep(runId, step, status) {
+    let note;
+    if (status === "skipped" || status === "blocked") {
+      note = window.prompt(`Why is this step ${status}?`);
+      if (!note?.trim()) return;
+    }
+    return patchRun(runId, { step: step.position, status, note });
   }
 
   async function refreshCase() {
@@ -496,6 +547,96 @@ export default function IncidentsPage() {
                     ))}
                   </div>
                 )}
+
+                <div>
+                  <p className="text-[10px] uppercase text-[var(--lain-muted)] mb-2">
+                    Playbook runs ({detail.runs.length})
+                  </p>
+                  {detail.runs.map((run) => {
+                    const finished = run.steps.filter((x) => x.status === "done" || x.status === "skipped").length;
+                    return (
+                      <div key={run.id} className="border border-[var(--lain-border)] rounded-lg px-2.5 py-2 mb-2">
+                        <div className="flex items-center gap-2 text-sm">
+                          <span className="flex-1 text-[var(--lain-text)]">{run.playbook_title}</span>
+                          <span className="text-[10px] uppercase text-[var(--lain-muted)]">
+                            {run.status} · {finished}/{run.steps.length}
+                          </span>
+                          {run.status === "active" && (
+                            <button
+                              type="button"
+                              onClick={() => patchRun(run.id, { finish: "abandoned" })}
+                              className="text-xs text-[var(--lain-muted)] hover:text-[var(--lain-accent-light)]"
+                            >
+                              Abandon
+                            </button>
+                          )}
+                        </div>
+                        <ol className="mt-1.5 space-y-1">
+                          {run.steps.map((step) => (
+                            <li key={step.id} className="flex items-start gap-2 text-xs">
+                              <span className="w-5 shrink-0">{STEP_ICON[step.status]}</span>
+                              <span className="flex-1 text-[var(--lain-text)]">
+                                {step.section && (
+                                  <span className="text-[var(--lain-muted)]">{step.section}: </span>
+                                )}
+                                {step.text}
+                                {step.note && (
+                                  <span className="block text-[var(--lain-muted)]">↳ {step.note}</span>
+                                )}
+                              </span>
+                              {run.status === "active" && (
+                                <span className="flex gap-1 shrink-0">
+                                  {step.status !== "done" && (
+                                    <button type="button" title="Mark done" onClick={() => setStep(run.id, step, "done")}>
+                                      ✔
+                                    </button>
+                                  )}
+                                  {step.status !== "skipped" && (
+                                    <button type="button" title="Skip" onClick={() => setStep(run.id, step, "skipped")}>
+                                      ⏭
+                                    </button>
+                                  )}
+                                  {step.status !== "blocked" && (
+                                    <button type="button" title="Blocked" onClick={() => setStep(run.id, step, "blocked")}>
+                                      ⛔
+                                    </button>
+                                  )}
+                                  {step.status !== "pending" && (
+                                    <button type="button" title="Reopen" onClick={() => setStep(run.id, step, "pending")}>
+                                      ↺
+                                    </button>
+                                  )}
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                      </div>
+                    );
+                  })}
+                  <div className="flex gap-2">
+                    <select
+                      value={pickedPlaybook}
+                      onChange={(e) => setPickedPlaybook(e.target.value)}
+                      className={`flex-1 ${INPUT}`}
+                    >
+                      <option value="">Run a playbook…</option>
+                      {playbooks.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.category}: {p.title}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={startRun}
+                      disabled={!pickedPlaybook}
+                      className={`${BTN} disabled:opacity-50`}
+                    >
+                      Start
+                    </button>
+                  </div>
+                </div>
 
                 <div>
                   <div className="flex items-center justify-between mb-2">
