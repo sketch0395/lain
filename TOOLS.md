@@ -136,6 +136,10 @@ API key configured.
 | `add_incident_note`         | Append a note/finding/action to a case timeline (defaults to the conversation's active case) | `content`, `type`, `incident_id`? | `lib/incidentCases.js`| —       |
 | `list_incidents`            | List incident cases, optionally by status                                | `status`, `include_closed`      | `lib/incidentCases.js`      | —                          |
 | `get_incident`              | Get one case with full timeline and links                                | `incident_id`?                  | `lib/incidentCases.js`      | —                          |
+| `extract_iocs`              | Extract IPs/domains/URLs/hashes/emails from text into the case           | `text`, `incident_id`?          | `lib/incidentIocs.js`       | —                          |
+| `list_iocs`                 | List a case's indicators and verdicts                                    | `incident_id`?, `verdict`?      | `lib/incidentIocs.js`       | —                          |
+| `enrich_iocs`               | Check pending indicators via AbuseIPDB / URLhaus / VirusTotal            | `incident_id`?, `ioc_id`?, `limit`? | `lib/incidentIocs.js`   | external reputation APIs   |
+| `set_ioc_verdict`           | Analyst-set verdict (locks it from auto-enrichment); confirm required    | `ioc_id`, `verdict`, `notes`?   | `lib/incidentIocs.js`       | —                          |
 | `fetch_web_page`            | Fetch a URL and extract readable text (for summarizing articles/advisories) | `url`                        | `tools/webFetch.js`        | —                          |
 | `get_cyber_news`            | Fetch recent items from configured cybersecurity RSS/Atom sources        | `topic`, `limit`                | `tools/cyberNews.js`       | —                          |
 | `add_cyber_news_source`     | Add an RSS/Atom feed to pull cyber news from                            | `name`, `url`                   | `tools/cyberNews.js`       | —                          |
