@@ -131,6 +131,11 @@ API key configured.
 |------------------------------|--------------------------------------------------------------------------|-----------------------------------|-----------------------------|----------------------------|
 | `lookup_threat_intel`       | Search the threat intel library (categories/titles/tags/content)        | `query`, `limit`                | `tools/threatIntel.js`     | —                          |
 | `add_threat_intel`          | Save/log an entry into the threat intel library                         | `category`, `title`, `content`, `tags` | `tools/threatIntel.js` | —                          |
+| `open_incident`             | Open an incident case and link it to this conversation (confirmation required) | `title`, `severity`, `category`, `summary`, `owner` | `lib/incidentCases.js`| —                |
+| `update_incident`           | Change a case's severity/status/phase/owner/etc.; logged to timeline (confirmation required) | `incident_id`?, `severity`, `status`, `phase`, … | `lib/incidentCases.js`| —       |
+| `add_incident_note`         | Append a note/finding/action to a case timeline (defaults to the conversation's active case) | `content`, `type`, `incident_id`? | `lib/incidentCases.js`| —       |
+| `list_incidents`            | List incident cases, optionally by status                                | `status`, `include_closed`      | `lib/incidentCases.js`      | —                          |
+| `get_incident`              | Get one case with full timeline and links                                | `incident_id`?                  | `lib/incidentCases.js`      | —                          |
 | `fetch_web_page`            | Fetch a URL and extract readable text (for summarizing articles/advisories) | `url`                        | `tools/webFetch.js`        | —                          |
 | `get_cyber_news`            | Fetch recent items from configured cybersecurity RSS/Atom sources        | `topic`, `limit`                | `tools/cyberNews.js`       | —                          |
 | `add_cyber_news_source`     | Add an RSS/Atom feed to pull cyber news from                            | `name`, `url`                   | `tools/cyberNews.js`       | —                          |

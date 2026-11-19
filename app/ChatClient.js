@@ -572,6 +572,12 @@ export default function ChatClient({ userLabel, userImage, signOutAction }) {
         >
           ⏰ Reminders
         </button>
+        <Link
+          href="/incidents"
+          className="flex items-center justify-center gap-2 bg-[var(--lain-panel-alt)] hover:bg-[var(--lain-border)] text-[var(--lain-text)] rounded-lg py-2 text-sm font-medium mb-3 border border-[var(--lain-border)] transition-colors"
+        >
+          🚨 Incidents
+        </Link>
         <div className="flex-1 overflow-y-auto space-y-1 -mx-1 px-1">
           {conversations.map((c) => (
             <div
